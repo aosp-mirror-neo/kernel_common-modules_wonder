@@ -76,15 +76,18 @@ static rx_handler_result_t wonder_rx_80211_frame(struct wonder_data *wonder, str
 {
 	struct ieee80211_hdr *hdr;
 	struct ieee80211_radiotap_header *radhdr;
+	struct net_device *vdev = NULL;
 
 	if (!wonder || !wonder->vdev) {
 		pr_err("RX received but interface not active. Dropping.\n");
 		goto drop;
 	}
 
+	vdev = wonder->vdev;
 	/* --- Packet Filtering & Validation (mac80211/Wonder Driver responsibility) --- */
 	if (skb->len < 24) { /* Basic check for 802.11 header length */
 		pr_err("Dropping short RX frame.\n");
+		vdev->stats.rx_length_errors++;
 		goto drop;
 	}
 
@@ -100,12 +103,20 @@ static rx_handler_result_t wonder_rx_80211_frame(struct wonder_data *wonder, str
 	}
 
 	if (!wonder_80211_filter(hdr)) {
+		vdev->stats.rx_dropped++;
 		if (IS_ENABLED(CONFIG_ANDROID_WONDER_RX_DEBUG))
 			pr_err("Dropping frame with frame control: %x.\n", hdr->frame_control);
 		goto drop;
 	}
 	/* Populate necessary metadata for mac80211 */
 	skb->dev = wonder->vdev;
+
+	if (wonder->data_version == WONDER_DATA_80211 ||
+		wonder->data_version == WONDER_DATA_80211_RADIOTAP) {
+		dev_sw_netstats_rx_add(vdev, skb->len);
+		vdev->stats.rx_packets++;
+		vdev->stats.rx_bytes += skb->len;
+	}
 	/* Pass the raw 802.11 frame into the mac80211 processing pipeline. */
 	/* mac80211 now handles de-AMSDU, 802.11 -> 802.3 conversion, and netif_rx(). */
 	switch (wonder->data_version) {
@@ -116,12 +127,16 @@ static rx_handler_result_t wonder_rx_80211_frame(struct wonder_data *wonder, str
 		netif_receive_skb(skb);
 		break;
 	default:
+		vdev->stats.rx_dropped++;
 		pr_err("Dropping Not supported data_version %d.\n", wonder->data_version);
 		goto drop;
 	}
 	return RX_HANDLER_CONSUMED;
 drop:
 	/* Drop Frames */
+	if (vdev) {
+		dev_core_stats_rx_dropped_inc(vdev);
+	}
 	kfree_skb(skb);
 	return RX_HANDLER_CONSUMED;
 }
@@ -551,21 +566,21 @@ static void wonder_tx(struct ieee80211_hw *hw,
 {
 	struct wonder_data *wonder = hw->priv;
 	struct net_device *pdev = wonder->pdev;
+	struct net_device *vdev = wonder->vdev;
 	struct ieee80211_radiotap_header *radhdr;
 	struct ieee80211_hdr *hdr;
 	struct wonder_txd *txd;
 	unsigned int room = skb_headroom(skb);
 
-	if (!pdev) {
-		dev_kfree_skb(skb);
+	if (unlikely(!pdev) || unlikely(!vdev)) {
 		pr_err("Physical device is not exist, dropping packet.\n");
-		return;
+		goto drop;
 	}
 
 	if (room < WONDER_TX_ROOM) {
-		dev_kfree_skb(skb);
+		vdev->stats.tx_errors++;
 		pr_err("Not enough headroom, dropping packet.\n");
-		return;
+		goto drop;
 	}
 
 	if (IS_ENABLED(CONFIG_ANDROID_WONDER_TX_DEBUG)) {
@@ -605,12 +620,21 @@ static void wonder_tx(struct ieee80211_hw *hw,
 	else
 		wonder_txs_enqueue(control->sta, skb);
 
-	if (!netif_running(pdev) || !netif_device_present(pdev)) {
-		dev_kfree_skb_any(skb);
+	if (unlikely(!netif_running(pdev) || !netif_device_present(pdev))) {
+		vdev->stats.tx_dropped++;
+		goto drop;
 	} else {
+		dev_sw_netstats_tx_add(vdev, 1, skb->len);
+		vdev->stats.tx_packets++;
+		vdev->stats.tx_bytes += skb->len;
 		/* Call the physical device's transmit handler */
 		dev_queue_xmit(skb);
 	}
+	return;
+drop:
+	if (vdev)
+		dev_core_stats_tx_dropped_inc(vdev);
+	dev_kfree_skb_any(skb);
 }
 
 static int wonder_start(struct ieee80211_hw *hw)
