@@ -393,7 +393,6 @@ static void syna_rx_handler(struct wonder_data *wonder, struct sk_buff *skb)
 			/* TODO: Workaround to remove 2 byte tailer for syna in QoS AMSDU frame. */
 			qos = ieee80211_get_qos_ctl((struct ieee80211_hdr *)hdr);
 			if (qos[0] & IEEE80211_QOS_CTL_A_MSDU_PRESENT) {
-				pr_debug("%s(): %d, RX amsdu\n", __func__, __LINE__);
 				skb->len -= 2;
 			}
 		}
@@ -603,15 +602,13 @@ static void wonder_tx(struct ieee80211_hw *hw,
 	/* Assign wonder txd */
 	txd->frame_type = le16_to_cpu(hdr->frame_control) & IEEE80211_FCTL_FTYPE;
 	txd->is_unicast = !is_multicast_ether_addr(hdr->addr1);
-	txd->tid = ieee80211_get_tid(hdr);
+	txd->tid = (ieee80211_is_data_qos(hdr->frame_control)) ? ieee80211_get_tid(hdr) : 0;
 	skb_pull(skb, sizeof(struct wonder_txd));
 	/* The monitor mode request non-zero length of radiotap. */
 	radhdr = (struct ieee80211_radiotap_header *)skb->data;
-	if (radhdr->it_len == 0) {
-		radhdr->it_version = 0;
-		radhdr->it_pad = 0;
-		radhdr->it_len = sizeof(struct ieee80211_radiotap_header) + 1;
-	}
+	radhdr->it_version = 0;
+	radhdr->it_pad = 0;
+	radhdr->it_len = sizeof(struct ieee80211_radiotap_header) + 1;
 	/* Assign the skb to the physical device for transmission */
 	skb->dev = pdev;
 	/* Report Fake TX status to adjust Rate and AMSDU length */
@@ -785,8 +782,11 @@ static void wonder_wake_tx_queue(struct ieee80211_hw *hw,
 	/* Get tx_queue length */
 	ieee80211_txq_get_depth(txq, &frame_count, &byte_count);
 	/* frame_count and byte_count */
-	pr_debug("%s(): Waking up TXQ for AC %d, mac80211 has %lu frames (%lu bytes) pending\n",
-			__func__, txq->ac, frame_count, byte_count);
+	if (IS_ENABLED(CONFIG_ANDROID_WONDER_TX_DEBUG)) {
+		pr_debug(
+		"Waking up TXQ for AC %d, mac80211 has %lu frames (%lu bytes) pending\n",
+		txq->ac, frame_count, byte_count);
+	}
 	/* Airtime fairness support. */
 	if (!wonder->tx_stop)
 		wonder_handle_tx_queue(hw, txq);
@@ -925,9 +925,6 @@ static void wonder_sta_rate_tbl_update(struct ieee80211_hw *hw,
 	for (i = 0; i < ARRAY_SIZE(sta_rates->rate); i++) {
 		if (sta_rates->rate[i].idx < 0 || !sta_rates->rate[i].count)
 			break;
-		pr_debug("%s(): i %d, idx %x, count %d, flags %x\n",
-			__func__, i, sta_rates->rate[i].idx, sta_rates->rate[i].count,
-			sta_rates->rate[i].flags);
 	}
 }
 
