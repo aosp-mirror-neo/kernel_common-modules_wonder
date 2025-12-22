@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+# Google Wonder WiFi Virtual Device driver.
+
+load(
+    "//build/kernel/kleaf:kernel.bzl",
+    "ddk_headers",
+    "ddk_module",
+)
+
+label_flag(
+    name = "wonder_kernel",
+    build_setting_default = "//common:kernel_aarch64_undefined",
+)
+
+label_flag(
+    name = "wonder_kernel_headers",
+    build_setting_default = "//common:all_headers_aarch64_undefined",
+)
+
+filegroup(
+    name = "wonder.kconfig",
+    srcs = [
+        "Kconfig",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+ddk_module(
+    name = "wonder",
+    srcs = glob([
+        "**/*.h",
+    ]) + [
+        "band_config.c",
+        "mac80211.c",
+        "mac80211_txs.c",
+        "main.c",
+        "nl80211_ven_cmd.c",
+        "ssr.c",
+        "wondertap.c",
+    ],
+    out = "wonder.ko",
+    conditional_srcs = {
+        "CONFIG_DEBUG_FS": {
+            True: [
+                "debugfs.c",
+            ],
+        },
+    },
+    defconfig = "wonder_fragment",
+    kconfig = "Kconfig",
+    kernel_build = ":wonder_kernel",
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        ":wonder_headers",
+        ":wonder_kernel_headers",
+    ],
+)
+
+ddk_headers(
+    name = "wonder_headers",
+    hdrs = glob([
+        "include/**/*.h",
+    ]),
+    includes = [
+        "include",
+    ],
+    visibility = [
+        # keep sorted
+        "//visibility:public",
+    ],
+)
