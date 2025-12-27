@@ -411,7 +411,7 @@ static rx_handler_result_t wonder_rx_adhoc_handler(struct wonder_data *wonder,
 
 	radhdr = (struct ieee80211_radiotap_header *)skb->data;
 	/* Pull radotap since this frame is preparing forwarded to mac80211. */
-	skb_pull(skb, radhdr->it_len);
+	skb_pull(skb, le16_to_cpu(radhdr->it_len));
 	hdr = (struct ieee80211_hdr_3addr *)(skb->data);
 
 	/* Filtering */
