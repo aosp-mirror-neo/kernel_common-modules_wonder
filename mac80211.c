@@ -112,7 +112,7 @@ static rx_handler_result_t wonder_rx_80211_frame(struct wonder_data *wonder, str
 		ieee80211_rx_ni(wonder->hw, skb);
 		break;
 	case WONDER_DATA_80211_RADIOTAP:
-		netif_rx(skb);
+		netif_receive_skb(skb);
 		break;
 	default:
 		pr_err("Dropping Not supported data_version %d.\n", wonder->data_version);
@@ -140,6 +140,12 @@ static rx_handler_result_t wonder_rx_monitor_handler(struct wonder_data *wonder,
 {
 	struct sk_buff *skb = *pskb;
 
+	/**
+	 *  It's expected the mac_header and protocol values will be filled in
+	 *  vendor's driver.
+	 *    skb_reset_mac_header(skb);
+	 *    skb->protocol = htons(ETH_P_802_2);
+	 */
 	/* LLC */
 	if (skb->protocol == htons(ETH_P_802_2))
 		return wonder_rx_80211_frame(wonder, skb);
