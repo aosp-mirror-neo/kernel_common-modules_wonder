@@ -8,9 +8,12 @@ config ANDROID_WONDER
 	depends on MAC80211
 	depends on AUXILIARY_BUS
 	help
-	  This enables the Google Wonder WiFi virtual device driver. This
-	  driver acts as a middleware layer using the mac80211 framework
-	  to provide a vendor-agnostic interface to userspace.
+	  This enables support for the Google Wonder WiFi Virtual Device
+	  Driver. This driver provides a virtual interface for interacting with
+	  Wonder WiFi hardware. Select this if you need to use the Wonder WiFi
+	  functionality for testing, development, or specific Wonder-based
+	  applications. It allows for simulation and control of WiFi
+	  operations.
 
 	  To build this as a module, choose m.
 
