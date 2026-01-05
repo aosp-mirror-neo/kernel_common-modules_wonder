@@ -54,10 +54,10 @@ static bool wonder_ver_can_support(enum wondertap_ver device_ver, enum wondertap
 static int wonder_probe(struct auxiliary_device *adev,
 			const struct auxiliary_device_id *id)
 {
+	struct wondertap_aux_dev *wonder_adev = container_of(adev, struct wondertap_aux_dev, adev);
 	struct wonder_data *wonder;
 	struct wondertap_data *wondertap;
-	struct wondertap_priv *wlan_priv;
-	struct device *dev = &adev->dev;
+	struct device *dev = &wonder_adev->adev.dev;
 
 	wonder = wonder_mac80211_init();
 	if (!wonder)
@@ -67,25 +67,18 @@ static int wonder_probe(struct auxiliary_device *adev,
 	/* Assign wondertap interface version will be used in the match process. */
 	wondertap->ver = WONDER_VERSION_1_5;
 
-	wlan_priv = dev_get_drvdata(dev);
-	if (!wlan_priv || !wlan_priv->wonder_ops) {
-		dev_err(dev, "Missing wonder_ops in aux device\n");
-		wonder_mac80211_exit(wonder);
-		return -EINVAL;
-	}
+	auxiliary_set_drvdata(&wonder_adev->adev, wonder);
 
-	auxiliary_set_drvdata(adev, wonder);
-
-	if (!wonder_ver_can_support(wlan_priv->ver, wondertap->ver)) {
+	if (!wonder_ver_can_support(wonder_adev->ver, wondertap->ver)) {
 		dev_err(dev, "%s(): wondertap interface version mismatch(%d,%d)!\n",
-			__func__, wlan_priv->ver, wondertap->ver);
+			__func__, wonder_adev->ver, wondertap->ver);
 		wonder_mac80211_exit(wonder);
 		return -EINVAL;
 	}
 
 	/* All matched, hook the ops to wondertap interface. */
-	wondertap->wonder_ops = wlan_priv->wonder_ops;
-	dev_dbg(dev, "%s(): Connected to wlan ver %d!\n", __func__, wlan_priv->ver);
+	wondertap->wonder_ops = wonder_adev->wonder_ops;
+	dev_dbg(dev, "%s(): Connected to wlan ver %d!\n", __func__, wonder_adev->ver);
 
 	wonder_debugfs_init(wonder);
 
@@ -107,6 +100,7 @@ static const struct auxiliary_device_id wonder_aux_id_table[] = {
 MODULE_DEVICE_TABLE(auxiliary, wonder_aux_id_table);
 
 static struct auxiliary_driver wonder_driver = {
+	.name = "wondertap",
 	.probe = wonder_probe,
 	.remove = wonder_remove,
 	.driver = {
