@@ -231,60 +231,20 @@ struct wondertap_tx_rate_mask_params {
 	u32 enable_mask;
 
 	/**
-	 * @brief A bitmap of permitted legacy (802.11a/g) rates.
-	 * The bits correspond to the driver's internal legacy rate indices.
-	 * This field is only valid if WONDERTAP_RATEMASK_EN_LEGACY is set.
+	 * @brief The maximum channel bandwidth allowed.
 	 */
-	u32 legacy_rates;
+	enum wondertap_rate_bw max_bw;
 
 	/**
-	 * @brief A bitmap of permitted HT (802.11n) MCS values for each
-	 * number of spatial streams (NSS).
-	 *
-	 * The array is indexed by (NSS - 1). For example, `ht_mcs[0]` is the
-	 * MCS mask for 1 spatial stream (NSS=1).
-	 * A bit `(1 << X)` being set in `ht_mcs[Y]` means that MCS index X
-	 * is permitted for (Y+1) spatial streams.
-	 *
-	 * This field is only valid if WONDERTAP_RATEMASK_EN_HT is set.
+	 * @brief The number of spatial streams (NSS).
+	 * Typically 1-4 for client devices. 0 is invalid.
 	 */
-	u16 ht_mcs[WONDERTAP_HT_NSS_MAX];
+	u8 max_nss;
 
 	/**
-	 * @brief A bitmap of permitted VHT (802.11ac) MCS values for each NSS.
-	 *
-	 * The array is indexed by (NSS - 1). For example, `vht_mcs[0]` is the
-	 * MCS mask for 1 spatial stream.
-	 * A bit `(1 << X)` being set in `vht_mcs[Y]` means that MCS index X
-	 * (0-9) is permitted for (Y+1) spatial streams.
-	 *
-	 * This field is only valid if WONDERTAP_RATEMASK_EN_VHT is set.
+	 * @brief The maximum Modulation and Coding Scheme (MCS) index allowed.
 	 */
-	u16 vht_mcs[WONDERTAP_VHT_NSS_MAX];
-
-	/**
-	 * @brief A bitmap of permitted HE (802.11ax) MCS values for each NSS.
-	 *
-	 * The array is indexed by (NSS - 1). For example, `he_mcs[0]` is the
-	 * MCS mask for 1 spatial stream.
-	 * A bit `(1 << X)` being set in `he_mcs[Y]` means that MCS index X
-	 * (0-11) is permitted for (Y+1) spatial streams.
-	 *
-	 * This field is only valid if WONDERTAP_RATEMASK_EN_HE is set.
-	 */
-	u16 he_mcs[WONDERTAP_HE_NSS_MAX];
-
-	/**
-	 * @brief A bitmap of permitted EHT (802.11be) MCS values for each NSS.
-	 *
-	 * The array is indexed by (NSS - 1). For example, `eht_mcs[0]` is the
-	 * MCS mask for 1 spatial stream.
-	 * A bit `(1 << X)` being set in `eht_mcs[Y]` means that MCS index X
-	 * (0-13) is permitted for (Y+1) spatial streams.
-	 *
-	 * This field is only valid if WONDERTAP_RATEMASK_EN_EHT is set.
-	 */
-	u16 eht_mcs[WONDERTAP_EHT_NSS_MAX];
+	u8 max_mcs;
 };
 
 
