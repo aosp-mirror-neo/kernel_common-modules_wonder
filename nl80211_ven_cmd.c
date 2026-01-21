@@ -228,6 +228,41 @@ static int wonder_vendor_cmd_set_fixed_tx_rate(struct wiphy *wiphy,
 	return wondertap_set_fixed_tx_rate(&wonder->wondertap_data, &params);
 }
 
+static int wonder_vendor_cmd_set_tx_rate_test(struct wiphy *wiphy,
+								struct wireless_dev *wdev,
+								const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct wonder_data *wonder = hw->priv;
+	struct nlattr *tb[WONDER_VEN_ATTR_TX_RATE_TEST_MAX + 1];
+	struct wondertap_tx_rate_mask_params tx_rate_params = {};
+
+	if (nla_parse(tb, WONDER_VEN_ATTR_TX_RATE_TEST_MAX, data, data_len,
+					wonder_fixed_rate_policy, NULL) < 0) {
+		pr_err("Failed to parse fixed TX rate attributes\n");
+		return -EINVAL;
+	}
+
+	/* Check that all mandatory attributes are present */
+	if (!tb[WONDER_VEN_ATTR_TX_RATE_TEST_PREAMBLE] || !tb[WONDER_VEN_ATTR_TX_RATE_TEST_BW] ||
+		!tb[WONDER_VEN_ATTR_TX_RATE_TEST_NSS] || !tb[WONDER_VEN_ATTR_TX_RATE_TEST_MCS]) {
+		pr_err("Missing mandatory attributes for TX rate\n");
+		return -EINVAL;
+	}
+
+	// Test only
+	tx_rate_params.enable_mask = 1 << (nla_get_u32(tb[WONDER_VEN_ATTR_TX_RATE_TEST_PREAMBLE]));
+	tx_rate_params.max_bw = nla_get_u32(tb[WONDER_VEN_ATTR_TX_RATE_TEST_BW]);
+	tx_rate_params.max_nss = nla_get_u8(tb[WONDER_VEN_ATTR_TX_RATE_TEST_NSS]);
+	tx_rate_params.max_mcs = nla_get_u8(tb[WONDER_VEN_ATTR_TX_RATE_TEST_MCS]);
+	pr_debug("Apply TX rate mask: enable_mask=%u, max_bw=%u, max_nss=%u, max_mcs=%u\n",
+		tx_rate_params.enable_mask, tx_rate_params.max_bw, tx_rate_params.max_nss,
+		tx_rate_params.max_mcs);
+	wondertap_set_tx_rate_mask(&wonder->wondertap_data, &tx_rate_params);
+
+	return 0;
+}
+
 static int wonder_vendor_cmd_set_reg(struct wiphy *wiphy,
 								struct wireless_dev *wdev,
 								const void *data, int data_len)
@@ -314,6 +349,15 @@ static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wonder_vendor_cmd_set_fixed_tx_rate,
+		.policy = VENDOR_CMD_RAW_DATA,
+	},
+	{
+		.info = {
+			.vendor_id = WONDER_VENDOR_ID,
+			.subcmd = WONDER_VEN_SUBCMD_SET_TX_RATE_TEST
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wonder_vendor_cmd_set_tx_rate_test,
 		.policy = VENDOR_CMD_RAW_DATA,
 	},
 	{
