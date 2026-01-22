@@ -6,6 +6,7 @@
 #include <linux/export.h>
 #include <linux/etherdevice.h>
 #include <wondertap.h>
+#include <linux/delay.h>
 
 #include "wondertap_internal.h"
 
@@ -18,6 +19,7 @@ int wondertap_init(struct wondertap_data *wondertap)
 {
 	struct wondertap_init_params params;
 	int ret = -EOPNOTSUPP;
+	int retry;
 
 	mutex_lock(&wondertap->lock);
 	if (wondertap_is_up(wondertap)) {
@@ -45,7 +47,19 @@ int wondertap_init(struct wondertap_data *wondertap)
 		memcpy(params.country_code, wondertap->cached_country_code,
 		       sizeof(wondertap->cached_country_code));
 
-		ret = wondertap->wonder_ops->init(&wondertap->vendor_handle, &params);
+		for (retry = 0; retry <= WONDER_INIT_RETRY_CNT; retry++) {
+			ret = wondertap->wonder_ops->init(&wondertap->vendor_handle, &params);
+			if (ret == 0)
+				break;
+
+			if (retry < WONDER_INIT_RETRY_CNT) {
+				pr_warn(
+					"Vendor init failed: %d. Retrying in %d ms...(retry %d)\n",
+					ret, WONDER_INIT_RETRY_WAIT, retry + 1);
+				msleep(WONDER_INIT_RETRY_WAIT);
+			}
+		}
+
 		if (ret == 0) {
 			wondertap->state = WONDERTAP_STATE_UP;
 			pr_debug("Vendor init successful. State set to UP.\n");
