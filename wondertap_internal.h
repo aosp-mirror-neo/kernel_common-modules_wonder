@@ -10,6 +10,9 @@ enum wondertap_state {
 	WONDERTAP_STATE_UP,
 };
 
+#define WONDER_INIT_RETRY_CNT 5
+#define WONDER_INIT_RETRY_WAIT 400
+
 /*
  * Bitflags to track which cached values have been explicitly set
  * by the user.
