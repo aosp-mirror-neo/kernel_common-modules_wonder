@@ -60,10 +60,11 @@ static inline void wondertap_prep(struct wondertap_data *wondertap)
  * init() callback to allocate and prepare the wondertap0 interface.
  *
  * @param wondertap A pointer to the wondertap instance data.
+ * @param params A pointer to the wondertap initial parameters.
  *
  * Return: 0 on success, or a negative errno code on failure.
  */
-int wondertap_init(struct wondertap_data *wondertap);
+int wondertap_init(struct wondertap_data *wondertap, const struct wondertap_init_params *params);
 
 /**
  * @brief Deinitializes the wondertap0 interface.

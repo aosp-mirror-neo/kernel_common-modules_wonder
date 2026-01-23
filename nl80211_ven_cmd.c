@@ -63,6 +63,14 @@ wonder_fixed_rate_policy[WONDER_VEN_ATTR_FIXED_TX_RATE_MAX + 1] = {
 };
 
 static const struct nla_policy
+wonder_tx_rate_mask_policy[WONDER_VEN_ATTR_TX_RATE_TEST_MAX + 1] = {
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_TX_RATE_TEST_PREAMBLE),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_TX_RATE_TEST_BW),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_TX_RATE_TEST_NSS),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_TX_RATE_TEST_MCS),
+};
+
+static const struct nla_policy
 wonder_set_reg_policy[WONDER_VEN_ATTR_REG_MAX + 1] = {
 	WONDER_POL_STRING(WONDER_VEN_ATTR_REG_COUNTRY_CODE),
 };
@@ -238,8 +246,8 @@ static int wonder_vendor_cmd_set_tx_rate_test(struct wiphy *wiphy,
 	struct wondertap_tx_rate_mask_params tx_rate_params = {};
 
 	if (nla_parse(tb, WONDER_VEN_ATTR_TX_RATE_TEST_MAX, data, data_len,
-					wonder_fixed_rate_policy, NULL) < 0) {
-		pr_err("Failed to parse fixed TX rate attributes\n");
+					wonder_tx_rate_mask_policy, NULL) < 0) {
+		pr_err("Failed to parse TX rate mask attributes\n");
 		return -EINVAL;
 	}
 
@@ -251,12 +259,12 @@ static int wonder_vendor_cmd_set_tx_rate_test(struct wiphy *wiphy,
 	}
 
 	// Test only
-	tx_rate_params.enable_mask = 1 << (nla_get_u32(tb[WONDER_VEN_ATTR_TX_RATE_TEST_PREAMBLE]));
-	tx_rate_params.max_bw = nla_get_u32(tb[WONDER_VEN_ATTR_TX_RATE_TEST_BW]);
+	tx_rate_params.max_preamble = nla_get_u32(tb[WONDER_VEN_ATTR_TX_RATE_TEST_PREAMBLE]);
+	tx_rate_params.max_bw = nla_get_u16(tb[WONDER_VEN_ATTR_TX_RATE_TEST_BW]);
 	tx_rate_params.max_nss = nla_get_u8(tb[WONDER_VEN_ATTR_TX_RATE_TEST_NSS]);
 	tx_rate_params.max_mcs = nla_get_u8(tb[WONDER_VEN_ATTR_TX_RATE_TEST_MCS]);
-	pr_debug("Apply TX rate mask: enable_mask=%u, max_bw=%u, max_nss=%u, max_mcs=%u\n",
-		tx_rate_params.enable_mask, tx_rate_params.max_bw, tx_rate_params.max_nss,
+	pr_debug("Apply TX rate: max_preamble=%u, max_bw=%u, max_nss=%u, max_mcs=%u\n",
+		tx_rate_params.max_preamble, tx_rate_params.max_bw, tx_rate_params.max_nss,
 		tx_rate_params.max_mcs);
 	wondertap_set_tx_rate_mask(&wonder->wondertap_data, &tx_rate_params);
 
