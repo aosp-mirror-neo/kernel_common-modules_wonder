@@ -26,6 +26,7 @@ enum wondertap_rate_preamble {
 	WONDERTAP_RATE_PREAMBLE_VHT = 2, /* 802.11ac Very High Throughput */
 	WONDERTAP_RATE_PREAMBLE_HE  = 3, /* 802.11ax High Efficiency */
 	WONDERTAP_RATE_PREAMBLE_EHT = 4, /* 802.11be Extremely High Throughput */
+	WONDERTAP_RATE_PREAMBLE_MAX,
 };
 
 /**
@@ -224,11 +225,9 @@ static_assert(sizeof(struct wonder_txd) <= 48);
  */
 struct wondertap_tx_rate_mask_params {
 	/**
-	 * @brief A bitmask from `enum wondertap_tx_rate_mask_enable` that
-	 * specifies which of the rate masks in this structure are valid and
-	 * should be applied by the driver.
+	 * @brief The maximum preamble/PHY type for this rate.
 	 */
-	u32 enable_mask;
+	enum wondertap_rate_preamble max_preamble;
 
 	/**
 	 * @brief The maximum channel bandwidth allowed.
@@ -242,9 +241,17 @@ struct wondertap_tx_rate_mask_params {
 	u8 max_nss;
 
 	/**
-	 * @brief The maximum Modulation and Coding Scheme (MCS) index allowed.
+	 * @brief The Maximum Modulation and Coding Scheme (MCS) index.
+	 * - For HT (802.11n): 0-7 (up to 31 for 4 streams).
+	 * - For VHT (802.11ac): 0-9.
+	 * - For HE (802.11ax): 0-11.
+	 * - For Legacy: This field is interpreted as the legacy rate index
+	 * (e.g., index for 54 Mbps, 48 Mbps, etc.). Ignored by some drivers.
 	 */
 	u8 max_mcs;
+
+	/** @brief Reserved for future use. */
+	u8 reserved[2];
 };
 
 
@@ -345,9 +352,14 @@ struct wondertap_init_params {
 	u8 ampdu_enable: 1;
 
 	/**
+	 * @brief Rate Adaptation feature control
+	 */
+	u8 rate_adaptation_enable: 1;
+
+	/**
 	 * @brief Reserved for future use and alignment.
 	 */
-	u8 reserved1: 6;
+	u8 reserved1: 5;
 	u8 reserved2;
 
 	/**
@@ -357,6 +369,11 @@ struct wondertap_init_params {
 	 */
 	char country_code[3];
 	u8 reserved3;
+
+	/**
+	 * @brief The initial transmission rate mask.
+	 */
+	struct wondertap_tx_rate_mask_params tx_rate_mask;
 };
 
 /**
@@ -467,6 +484,7 @@ enum wondertap_ver {
 	WONDER_VERSION_1_4,
 	WONDER_VERSION_1_4_1,
 	WONDER_VERSION_1_5,
+	WONDER_VERSION_1_5_1,
 	WONDER_VERSION_MAX,
 };
 
