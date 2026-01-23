@@ -33,6 +33,7 @@ static int wonder_ver_match_table[WONDER_VERSION_MAX][WONDER_MAX_COMPAT_VERSIONS
 	{ WONDER_VERSION_1_4, -1 },
 	{ WONDER_VERSION_1_4_1, WONDER_VERSION_1_4, -1 },
 	{ WONDER_VERSION_1_5, WONDER_VERSION_1_4, WONDER_VERSION_1_4_1, -1 },
+	{ WONDER_VERSION_1_5_1, WONDER_VERSION_1_4, WONDER_VERSION_1_5, -1 },
 };
 
 static bool wonder_ver_can_support(enum wondertap_ver device_ver, enum wondertap_ver driver_ver)
@@ -65,7 +66,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 
 	wondertap = &wonder->wondertap_data;
 	/* Assign wondertap interface version will be used in the match process. */
-	wondertap->ver = WONDER_VERSION_1_5;
+	wondertap->ver = WONDER_VERSION_1_5_1;
 
 	auxiliary_set_drvdata(&wonder_adev->adev, wonder);
 
@@ -78,7 +79,8 @@ static int wonder_probe(struct auxiliary_device *adev,
 
 	/* All matched, hook the ops to wondertap interface. */
 	wondertap->wonder_ops = wonder_adev->wonder_ops;
-	dev_dbg(dev, "%s(): Connected to wlan ver %d!\n", __func__, wonder_adev->ver);
+	dev_dbg(dev, "%s(): Connected to wlan ver %d (cur: wonder ver %d)!\n",
+		__func__, wonder_adev->ver, wondertap->ver);
 
 	wonder_debugfs_init(wonder);
 
