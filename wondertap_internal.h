@@ -31,6 +31,7 @@ struct wondertap_data {
 	struct wondertap_set_freq_params cached_freq;
 	struct wondertap_frame_filter_params cached_frame_filter;
 	struct wondertap_fixed_tx_rate_params cached_tx_rate;
+	struct wondertap_capability cap;
 	u8 cached_bssid[ETH_ALEN];
 	char cached_country_code[3];
 	enum wondertap_ver ver;
