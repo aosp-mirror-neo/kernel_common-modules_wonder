@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/compiler.h>
 #include <linux/version.h>
+#include <linux/limits.h>
 
 #include "core.h"
 #include "mac80211.h"
@@ -489,10 +490,8 @@ static rx_handler_result_t wonder_rx_handler(struct sk_buff **pskb)
 	return RX_HANDLER_PASS;
 }
 
-static int wonder_rx_setup(struct wonder_data *wonder)
+static int wonder_sanity_check(struct wonder_data *wonder)
 {
-	int ret;
-
 	if (!wonder->pdev)
 		return -ENODEV;
 
@@ -505,6 +504,21 @@ static int wonder_rx_setup(struct wonder_data *wonder)
 		pr_err("Failed to get virtual device %s\n", VDEV_NAME);
 		return -ENODEV;
 	}
+
+	return 0;
+}
+
+static int wonder_tx_setup(struct wonder_data *wonder)
+{
+	wonder->vdev->mtu = INT_MAX;
+
+	return 0;
+}
+
+static int wonder_rx_setup(struct wonder_data *wonder)
+{
+	int ret;
+
 	/*
 	 * Since we are decoupling, we register our RX injection point with the
 	 * vendor here.
@@ -633,12 +647,33 @@ static int wonder_start(struct ieee80211_hw *hw)
 	ret = wonder_pdev_get(wonder, pdev_name);
 	if (ret) {
 		pr_err("Failed to get physical device %s\n", pdev_name);
-		wondertap_deinit(&wonder->wondertap_data);
-		return ret;
+		goto WONDER_PREPARATION_ERROR;
+	}
+
+	ret = wonder_sanity_check(wonder);
+	if (ret) {
+		pr_err("sanity_check failed (%d)\n", ret);
+		goto WONDER_PREPARATION_ERROR;
+	}
+
+	ret = wonder_tx_setup(wonder);
+	if (ret) {
+		pr_err("tx_setup failed (%d)\n", ret);
+		goto WONDER_PREPARATION_ERROR;
 	}
 
 	/* turn on frame reception */
-	return wonder_rx_setup(wonder);
+	ret = wonder_rx_setup(wonder);
+	if (ret) {
+		pr_err("rx_setup failed (%d)\n", ret);
+		goto WONDER_PREPARATION_ERROR;
+	}
+
+	return 0;
+
+WONDER_PREPARATION_ERROR:
+	wondertap_deinit(&wonder->wondertap_data);
+	return ret;
 }
 
 static void wonder_stop(struct ieee80211_hw *hw)
@@ -823,8 +858,8 @@ static int wonder_add_interface(struct ieee80211_hw *hw,
 	wonder->vif = vif;
 	wonder->iftype = wdev->iftype;
 	wonder->vdev = vdev;
-	pr_debug("Added virtual interface %s (Type: %d), name %s\n",
-			wiphy_name(hw->wiphy), vif->type, vdev->name);
+	pr_debug("Added virtual interface %s (Type: %d), name %s, mtu %d\n",
+			wiphy_name(hw->wiphy), vif->type, vdev->name, vdev->mtu);
 	/* Configure mac address to phyiscal interface address */
 	return wonder_force_set_mac(wonder, vif);
 }
