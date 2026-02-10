@@ -617,22 +617,22 @@ static int wonder_start(struct ieee80211_hw *hw)
 	struct wonder_data *wonder = hw->priv;
 	const char *pdev_name = physical_name;
 	struct wondertap_init_params wondertap_init_params;
-	struct wondertap_capability wondertap_capabilities;
 	int ret;
 
 	/* This should turn on the hardware and frame reception. */
-	ret = wondertap_get_capabilities(&wonder->wondertap_data, &wondertap_capabilities);
+	ret = wondertap_get_capabilities(&wonder->wondertap_data, &wonder->wondertap_data.cap);
 	if (ret) {
 		pr_err("Failed to get wondertap capabilities, error: %d\n", ret);
 		return ret;
 	}
 
-	pr_debug("wondertap version: %u\n", wondertap_capabilities.version);
-	pr_debug("wondertap capabilities: 0x%X\n", wondertap_capabilities.raw_bits);
+	pr_debug("wondertap version: %u\n", wonder->wondertap_data.cap.version);
+	pr_debug("wondertap capabilities: 0x%X\n", wonder->wondertap_data.cap.raw_bits);
+	wondertap_init_params.ampdu_enable = wonder->wondertap_data.cap.bits.ampdu_aggregation;
+	wondertap_init_params.amsdu_enable = wonder->wondertap_data.cap.bits.amsdu_aggregation;
+	wondertap_init_params.rate_adaptation_enable =
+		wonder->wondertap_data.cap.bits.rate_adaptation;
 
-	wondertap_init_params.ampdu_enable = wondertap_capabilities.bits.ampdu_aggregation;
-	wondertap_init_params.amsdu_enable = wondertap_capabilities.bits.amsdu_aggregation;
-	wondertap_init_params.rate_adaptation_enable = wondertap_capabilities.bits.rate_adaptation;
 	ret = wondertap_init(&wonder->wondertap_data, &wondertap_init_params);
 	if (ret) {
 		pr_err("Failed to initialize wondertap0, error: %d\n", ret);

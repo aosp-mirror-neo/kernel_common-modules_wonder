@@ -331,6 +331,51 @@ static int wonder_vendor_cmd_get_if_mac_addr(struct wiphy *wiphy,
 	return cfg80211_vendor_cmd_reply(skb);
 }
 
+static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
+	struct wireless_dev *wdev,
+	const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct wonder_data *wonder = hw->priv;
+	struct sk_buff *skb;
+	u8 hw_amsdu = wonder->wondertap_data.cap.bits.amsdu_aggregation;
+	u8 hw_ampdu = wonder->wondertap_data.cap.bits.ampdu_aggregation;
+	const size_t reply_skb_size = sizeof(u32) + sizeof(u8)*2;
+
+	if (!wonder->vdev)
+		return -ENODEV;
+
+	pr_debug("Handling GET_CAP. MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u\n",
+		wonder->vdev->mtu, hw_amsdu, hw_ampdu);
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(reply_skb_size));
+	if (!skb) {
+		pr_err("Failed to allocate reply skb\n");
+		return -ENOMEM;
+	}
+
+	/* Put the MTU length attribute into the skb. */
+	if (nla_put(skb, WONDER_VEN_ATTR_CAP_MTU, sizeof(u32), &wonder->vdev->mtu)) {
+		pr_err("Failed to put CAP MTU attribute\n");
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	if (nla_put(skb, WONDER_VEN_ATTR_CAP_HW_AMSDU, sizeof(u8), &hw_amsdu)) {
+		pr_err("Failed to put CAP HW_AMSDU attribute\n");
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	if (nla_put(skb, WONDER_VEN_ATTR_CAP_HW_AMPDU, sizeof(u8), &hw_ampdu)) {
+		pr_err("Failed to put CAP HW_AMPDU attribute\n");
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	return cfg80211_vendor_cmd_reply(skb);
+}
+
 static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 	{
 		.info = {
@@ -384,6 +429,15 @@ static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wonder_vendor_cmd_get_if_mac_addr,
+		.policy = VENDOR_CMD_RAW_DATA,
+	},
+	{
+		.info = {
+			.vendor_id = WONDER_VENDOR_ID,
+			.subcmd = WONDER_VEN_SUBCMD_GET_CAP
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wonder_vendor_cmd_get_cap,
 		.policy = VENDOR_CMD_RAW_DATA,
 	},
 };
