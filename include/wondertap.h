@@ -69,6 +69,52 @@ enum wondertap_rate_bw {
 	WONDERTAP_RATE_BW_320 = 4,
 };
 
+/** @brief Defines the role in the channel hopping list. */
+enum wondertap_role {
+	WONDERTAP_ROLE_NOP,
+	WONDERTAP_ROLE_STA,
+	WONDERTAP_ROLE_SCAN,
+	WONDERTAP_ROLE_MAX,
+};
+
+/** @brief Represents a single entry of parameters in the channel hopping schedule. */
+struct wondertap_channel_list_params {
+	u32 freq;
+	enum wondertap_rate_bw bandwidth;
+	enum wondertap_role role;
+};
+
+/**
+ * @brief Parameters for scheduling channel switches.
+ */
+struct channel_schedule_request {
+	/**
+	 * @brief Length of channel in the list.
+	 */
+	u8 channel_list_len;
+	u8 reserved1[3];
+
+	/**
+	 * @brief Index of the next channel in the list to visit.
+	 */
+	u32 next_channel_index;
+
+	/**
+	 * @brief Time to stay on each channel in Time Units (TU).
+	 */
+	u32 dwell_time_tu;
+
+	/**
+	 * @brief Target switch time in TSF.
+	 */
+	u32 target_switch_time_tsf;
+
+	/**
+	 * @brief List of channel parameters to visit.
+	 */
+	struct wondertap_channel_list_params *channel_list;
+};
+
 /** @brief Defines the Guard Interval (GI). */
 enum wondertap_rate_gi {
 	WONDERTAP_RATE_GI_DEFAULT = 0, /* Driver uses default (e.g., Long GI or 0.8us) */
@@ -297,6 +343,11 @@ struct wondertap_capability {
 			u32 reserved: 19;
 		} bits;
 	};
+	/**
+	 * @brief Maximum Channel Switch Time in micro second required by the vendor for
+	 *	      jumping to the new channel lists.
+	 */
+	u32 maximum_channel_switch_time_us;
 };
 
 /** @brief Initialization parameters passed from the core to the vendor driver. */
@@ -469,6 +520,23 @@ struct wondertap_ops {
 	 * @return 0 on success, negative error code.
 	 */
 	int (*get_capabilities)(void *handle, struct wondertap_capability *features);
+
+	/**
+	 * @brief Schedules a channel switch request.
+	 * @param handle The driver instance handle.
+	 * @param request A pointer to the channel schedule request parameters.
+	 * @return 0 on success, negative error code.
+	 */
+	int (*channel_schedule_request)(void *handle,
+					const struct channel_schedule_request *request);
+
+	/**
+	 * @brief Get Current MAC TSF from the vendor
+	 * @param handle The opaque driver instance handle.
+	 * @param tsf MAC TSF will be utilized for the channel list request.
+	 * Return: 0 on success, negative error code.
+	 */
+	int (*get_mac_tsf)(void *handle, u32 *mac_tsf);
 };
 
 /**
