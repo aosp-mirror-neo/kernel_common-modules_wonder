@@ -632,7 +632,8 @@ static int wonder_start(struct ieee80211_hw *hw)
 	wondertap_init_params.amsdu_enable = wonder->wondertap_data.cap.bits.amsdu_aggregation;
 	wondertap_init_params.rate_adaptation_enable =
 		wonder->wondertap_data.cap.bits.rate_adaptation;
-
+	wondertap_init_params.channel_hopping_enable =
+		wonder->wondertap_data.cap.bits.channel_hopping;
 	ret = wondertap_init(&wonder->wondertap_data, &wondertap_init_params);
 	if (ret) {
 		pr_err("Failed to initialize wondertap0, error: %d\n", ret);
