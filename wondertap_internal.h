@@ -21,6 +21,7 @@ enum wondertap_state {
 #define WONDERTAP_CACHE_TX_RATE_SET      (1 << 1)
 #define WONDERTAP_CACHE_BSSID_SET        (1 << 2)
 #define WONDERTAP_CACHE_COUNTRY_CODE_SET (1 << 3)
+#define WONDERTAP_CACHE_CHANNEL_SCHEDULE_SET (1 << 4)
 
 struct wondertap_data {
 	void *vendor_handle;
@@ -32,6 +33,7 @@ struct wondertap_data {
 	struct wondertap_frame_filter_params cached_frame_filter;
 	struct wondertap_fixed_tx_rate_params cached_tx_rate;
 	struct wondertap_capability cap;
+	struct channel_schedule_request cached_channel_schedule;
 	u8 cached_bssid[ETH_ALEN];
 	char cached_country_code[3];
 	enum wondertap_ver ver;
@@ -190,4 +192,45 @@ int wondertap_get_interface_mac_address(struct wondertap_data *wondertap,
  */
 int wondertap_set_bssid_filter(struct wondertap_data *wondertap, const u8 *bssid);
 
+/**
+ * @brief Schedules a channel switch request.
+ *
+ * @param wondertap A pointer to the wondertap instance data.
+ * @param request A pointer to the channel schedule request parameters.
+ *
+ * @return 0 on success, or a negative error code on failure.
+ */
+int wondertap_channel_schedule_request(struct wondertap_data *wondertap,
+				       const struct channel_schedule_request *request);
+
+/**
+ * @brief Get Current MAC TSF from the vendor
+ *
+ * @param handle The opaque driver instance handle.
+ * @param mac_tsf MAC TSF will be utilized for the channel list request.
+ *
+ * @return 0 on success, or a negative error code on failure.
+ */
+int wondertap_get_mac_tsf(struct wondertap_data *wondertap, u32 *mac_tsf);
+
+/**
+ * @brief Register a vendor's wondertap operations.
+ *
+ * @param ops A pointer to the vendor's statically defined wondertap_ops structure.
+ * This pointer must remain valid until wondertap_unregister_ops() is
+ * called.
+ *
+ * Return 0 on success.
+ * @note Only one vendor implementation can be registered at a time.
+ */
+int wondertap_register_ops(const struct wondertap_ops *ops);
+
+/**
+ * @brief Unregister a vendor's wondertap operations.
+ *
+ * @param ops The exact same pointer to the wondertap_ops structure that was
+ * previously passed to wondertap_register_ops(). The unregistration
+ * will only proceed if this pointer matches the currently active one.
+ */
+void wondertap_unregister_ops(const struct wondertap_ops *ops);
 #endif /* __WONDERTAP_INTERNAL_H__ */

@@ -7,6 +7,7 @@
 #include <linux/etherdevice.h>
 #include <wondertap.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 
 #include "wondertap_internal.h"
 
@@ -246,6 +247,15 @@ int wondertap_set_reg(struct wondertap_data *wondertap, const char *country_code
 	return 0;
 }
 
+int wondertap_get_mac_tsf(struct wondertap_data *wondertap, u32 *mac_tsf)
+{
+	if (wondertap->wonder_ops && wondertap->wonder_ops->get_mac_tsf)
+		return wondertap->wonder_ops->get_mac_tsf(wondertap->vendor_handle, mac_tsf);
+
+	pr_err("Vendor operation 'get_mac_tsf' is not implemented\n");
+	return -EOPNOTSUPP;
+}
+
 int wondertap_get_capabilities(struct wondertap_data *wondertap,
 			       struct wondertap_capability *features)
 {
@@ -282,4 +292,76 @@ int wondertap_set_bssid_filter(struct wondertap_data *wondertap, const u8 *bssid
 	pr_warn("Caching incoming BSSID filter settings.\n");
 	mutex_unlock(&wondertap->lock);
 	return 0;
+}
+
+int wondertap_channel_schedule_request(struct wondertap_data *wondertap,
+				       const struct channel_schedule_request *request)
+{
+	struct channel_schedule_request *cached_schedule = &wondertap->cached_channel_schedule;
+	int i;
+	int ret = 0;
+	size_t list_size = request->channel_list_len *
+			sizeof(struct wondertap_channel_list_params);
+
+	mutex_lock(&wondertap->lock);
+
+	if (cached_schedule->channel_list_len != request->channel_list_len) {
+		kfree(cached_schedule->channel_list);
+		cached_schedule->channel_list = NULL;
+
+		if (request->channel_list_len > 0) {
+			cached_schedule->channel_list = kmalloc(list_size, GFP_KERNEL);
+			if (!cached_schedule->channel_list) {
+				pr_err("Failed to allocate memory for channel list\n");
+				cached_schedule->channel_list_len = 0;
+				wondertap->cache_flags &= ~WONDERTAP_CACHE_CHANNEL_SCHEDULE_SET;
+				ret = -ENOMEM;
+				goto out_unlock;
+			}
+		}
+	}
+
+	cached_schedule->channel_list_len = request->channel_list_len;
+	cached_schedule->next_channel_index = request->next_channel_index;
+	cached_schedule->dwell_time_tu = request->dwell_time_tu;
+	cached_schedule->target_switch_time_tsf =
+		request->target_switch_time_tsf;
+
+	if (request->channel_list && request->channel_list_len > 0)
+		memcpy(cached_schedule->channel_list, request->channel_list, list_size);
+
+	wondertap->cache_flags |= WONDERTAP_CACHE_CHANNEL_SCHEDULE_SET;
+
+	if (wondertap_is_up(wondertap)) {
+		if (wondertap->wonder_ops && wondertap->wonder_ops->channel_schedule_request) {
+			ret = wondertap->wonder_ops->channel_schedule_request(
+					wondertap->vendor_handle, request);
+		} else {
+			pr_err(
+				"Vendor operation 'channel_schedule_request' is not implemented\n");
+			ret = -EOPNOTSUPP;
+		}
+	} else {
+		pr_warn("wondertap is inactive, caching incoming schedule settings.\n");
+	}
+
+	pr_debug("========== [ Channel Schedule Request ] ==========\n");
+	pr_debug("    List Len: %u\n", cached_schedule->channel_list_len);
+	pr_debug("    Next Idx: %u\n", cached_schedule->next_channel_index);
+	pr_debug("    Dwell TU: %u\n", cached_schedule->dwell_time_tu);
+	pr_debug("    Switch TSF: 0x%016x\n", cached_schedule->target_switch_time_tsf);
+
+	if (cached_schedule->channel_list) {
+		for (i = 0; i < cached_schedule->channel_list_len; i++) {
+			pr_debug("    Entry %d: [Freq: %u, BW: %u, Role: %u]\n",
+				    i, cached_schedule->channel_list[i].freq,
+				    cached_schedule->channel_list[i].bandwidth,
+				    cached_schedule->channel_list[i].role);
+		}
+	}
+	pr_debug("==================================================\n");
+
+out_unlock:
+	mutex_unlock(&wondertap->lock);
+	return ret;
 }

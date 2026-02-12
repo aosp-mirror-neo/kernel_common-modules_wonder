@@ -38,6 +38,12 @@
 #define WONDER_POL_STRING(attr) \
 	[attr] = { .type = NLA_NUL_STRING, .len = attr##_SIZE }
 
+/**
+ * @brief Auto-generate policy for nested attributes
+ */
+#define WONDER_POL_NESTED(attr) \
+	[attr] = { .type = NLA_NESTED }
+
 static const struct nla_policy
 wonder_set_frequency_policy[WONDER_VEN_ATTR_CHANNEL_ATTR_MAX + 1] = {
 	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_FREQ),
@@ -73,6 +79,23 @@ wonder_tx_rate_mask_policy[WONDER_VEN_ATTR_TX_RATE_TEST_MAX + 1] = {
 static const struct nla_policy
 wonder_set_reg_policy[WONDER_VEN_ATTR_REG_MAX + 1] = {
 	WONDER_POL_STRING(WONDER_VEN_ATTR_REG_COUNTRY_CODE),
+};
+
+static const struct nla_policy
+wonder_channel_schedule_policy[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_MAX + 1] = {
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST_LEN),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_NEXT_IDX),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_DWELL_TIME),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_SWITCH_TIME),
+	WONDER_POL_NESTED(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_TSF_OFFSET),
+};
+
+static const struct nla_policy
+wonder_channel_list_entry_policy[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_MAX + 1] = {
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_FREQ),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_BW),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_ROLE),
 };
 
 static int wonder_vendor_cmd_set_frequency(struct wiphy *wiphy,
@@ -376,6 +399,143 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 	return cfg80211_vendor_cmd_reply(skb);
 }
 
+static int wonder_vendor_cmd_set_channel_schedule_req(struct wiphy *wiphy,
+						      struct wireless_dev *wdev,
+						      const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct wonder_data *wonder = hw->priv;
+	struct nlattr *tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_MAX + 1];
+	struct channel_schedule_request params = { 0 };
+	struct nlattr *nla;
+	int rem;
+	int i = 0;
+
+	if (nla_parse(tb, WONDER_VEN_ATTR_CHANNEL_SCHEDULE_MAX, data, data_len,
+		      NULL, NULL) < 0) {
+		pr_err("Failed to parse channel schedule attributes\n");
+		return -EINVAL;
+	}
+
+	if (!tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST_LEN] ||
+	    !tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_NEXT_IDX] ||
+	    !tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_DWELL_TIME] ||
+	    !tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST]) {
+		pr_err("Missing mandatory attributes for channel schedule\n");
+		return -EINVAL;
+	}
+
+	if (tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_TSF_OFFSET]) {
+		struct wondertap_capability cap;
+		u32 tsf_offset_us;
+		u32 mac_tsf;
+		int ret;
+
+		wondertap_get_capabilities(&wonder->wondertap_data, &cap);
+		if (!cap.bits.channel_hopping) {
+			pr_err("Channel hopping not enabled in capabilities\n");
+			return -EOPNOTSUPP;
+		}
+
+		ret = wondertap_get_mac_tsf(&wonder->wondertap_data, &mac_tsf);
+		if (ret) {
+			pr_err("Failed to get MAC TSF: %d\n", ret);
+			return ret;
+		}
+
+		tsf_offset_us = nla_get_u32(tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_TSF_OFFSET]);
+		params.target_switch_time_tsf =
+			mac_tsf + cap.maximum_channel_switch_time_us + tsf_offset_us;
+	} else if (tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_SWITCH_TIME]) {
+		params.target_switch_time_tsf =
+			nla_get_u32(tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_SWITCH_TIME]);
+	} else {
+		pr_err(
+			"Missing time attribute: need either TSF_OFFSET or SWITCH_TIME\n");
+		return -EINVAL;
+	}
+
+	params.channel_list_len = nla_get_u8(tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST_LEN]);
+	params.next_channel_index = nla_get_u32(tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_NEXT_IDX]);
+	params.dwell_time_tu = nla_get_u32(tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_DWELL_TIME]);
+
+	if (params.channel_list_len > 0) {
+		params.channel_list = kcalloc(params.channel_list_len,
+					      sizeof(*params.channel_list), GFP_KERNEL);
+		if (!params.channel_list)
+			return -ENOMEM;
+
+		nla_for_each_nested(nla, tb[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST], rem) {
+			struct nlattr *entry_tb[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_MAX + 1];
+
+			if (i >= params.channel_list_len) {
+				pr_err("More entries than specified in channel_list_len\n");
+				kfree(params.channel_list);
+				return -EINVAL;
+			}
+
+			if (nla_parse_nested(entry_tb, WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_MAX, nla,
+					     wonder_channel_list_entry_policy, NULL) < 0) {
+				pr_err("Failed to parse channel list entry\n");
+				kfree(params.channel_list);
+				return -EINVAL;
+			}
+
+			if (!entry_tb[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_BW] ||
+			    !entry_tb[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_ROLE] ||
+			    !entry_tb[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_FREQ]) {
+				pr_err("Missing required attribute in channel list entry\n");
+				kfree(params.channel_list);
+				return -EINVAL;
+			}
+
+			params.channel_list[i].freq =
+				nla_get_u32(entry_tb[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_FREQ]);
+			params.channel_list[i].bandwidth =
+				nla_get_u32(entry_tb[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_BW]);
+			params.channel_list[i].role =
+				nla_get_u32(entry_tb[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_ROLE]);
+			i++;
+		}
+	}
+
+	wondertap_channel_schedule_request(&wonder->wondertap_data, &params);
+
+	kfree(params.channel_list);
+	return 0;
+}
+
+static int wonder_vendor_cmd_get_mac_tsf(struct wiphy *wiphy,
+					 struct wireless_dev *wdev,
+					 const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct wonder_data *wonder = hw->priv;
+	struct sk_buff *skb;
+	u32 mac_tsf;
+	int ret;
+
+	ret = wondertap_get_mac_tsf(&wonder->wondertap_data, &mac_tsf);
+	if (ret)
+		return ret;
+
+	pr_debug("Handling GET_MAC_TSF. Found TSF: %u\n", mac_tsf);
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(sizeof(u32)));
+	if (!skb) {
+		pr_err("Failed to allocate reply skb\n");
+		return -ENOMEM;
+	}
+
+	if (nla_put_u32(skb, WONDER_VEN_ATTR_MAC_TSF, mac_tsf)) {
+		pr_err("Failed to put MAC TSF attribute\n");
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	return cfg80211_vendor_cmd_reply(skb);
+}
+
 static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 	{
 		.info = {
@@ -438,6 +598,24 @@ static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wonder_vendor_cmd_get_cap,
+		.policy = VENDOR_CMD_RAW_DATA,
+	},
+	{
+		.info = {
+			.vendor_id = WONDER_VENDOR_ID,
+			.subcmd = WONDER_VEN_SUBCMD_SET_CHANNEL_SCHEDULE_REQ
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wonder_vendor_cmd_set_channel_schedule_req,
+		.policy = VENDOR_CMD_RAW_DATA,
+	},
+	{
+		.info = {
+			.vendor_id = WONDER_VENDOR_ID,
+			.subcmd = WONDER_VEN_SUBCMD_GET_MAC_TSF
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wonder_vendor_cmd_get_mac_tsf,
 		.policy = VENDOR_CMD_RAW_DATA,
 	},
 };
