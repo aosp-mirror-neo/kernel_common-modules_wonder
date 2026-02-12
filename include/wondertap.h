@@ -339,8 +339,10 @@ struct wondertap_capability {
 			u32 custom_data_retry_limit: 1;
 			/* @brief Frame type filtering is supported. */
 			u32 frame_type_filter: 1;
+			/* @brief Channel hopping is supported. */
+			u32 channel_hopping: 1;
 			/* @brief Reserved for future use. Must be 0. */
-			u32 reserved: 19;
+			u32 reserved: 18;
 		} bits;
 	};
 	/**
@@ -408,9 +410,14 @@ struct wondertap_init_params {
 	u8 rate_adaptation_enable: 1;
 
 	/**
+	 * @brief Channel hopping feature control
+	 */
+	u8 channel_hopping_enable: 1;
+
+	/**
 	 * @brief Reserved for future use and alignment.
 	 */
-	u8 reserved1: 5;
+	u8 reserved1: 4;
 	u8 reserved2;
 
 	/**
