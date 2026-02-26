@@ -7,6 +7,7 @@
  * network device and kicking off the mac80211 registration process.
  */
 
+#include "include/wondertap.h"
 #include <linux/auxiliary_bus.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -24,29 +25,33 @@
 module_param(physical_name, charp, 0444);
 MODULE_PARM_DESC(physical_name, "Interface name to use (e.g., wlan0, radiotap0, ...)");
 
-#define WONDER_MAX_COMPAT_VERSIONS 4
+#define WONDER_MAX_COMPAT_VERSIONS 5
 static int wonder_ver_match_table[WONDER_VERSION_MAX][WONDER_MAX_COMPAT_VERSIONS] = {
-	{ WONDER_VERSION_1_0, -1 },
-	{ WONDER_VERSION_1_1, -1 },
-	{ WONDER_VERSION_1_2, -1 },
-	{ WONDER_VERSION_1_3, -1 },
-	{ WONDER_VERSION_1_4, -1 },
-	{ WONDER_VERSION_1_4_1, WONDER_VERSION_1_4, -1 },
-	{ WONDER_VERSION_1_5, WONDER_VERSION_1_4, WONDER_VERSION_1_4_1, -1 },
-	{ WONDER_VERSION_1_5_1, WONDER_VERSION_1_4, WONDER_VERSION_1_5, -1 },
+	{ WONDER_VERSION_3_0, -1 },
+	{ WONDER_VERSION_3_1, -1 },
+	{ WONDER_VERSION_3_2, -1 },
+	{ WONDER_VERSION_3_3, -1 },
+	{ WONDER_VERSION_3_4, -1 },
+	{ WONDER_VERSION_3_4_1, WONDER_VERSION_3_4, -1 },
+	{ WONDER_VERSION_3_5, WONDER_VERSION_3_4, WONDER_VERSION_3_4_1, -1 },
+	{ WONDER_VERSION_3_5_1, WONDER_VERSION_3_4, WONDER_VERSION_3_5,
+		WONDER_VERSION_3_4_1, -1 },
+	{ WONDER_VERSION_3_6_1, WONDER_VERSION_3_4, WONDER_VERSION_3_5,
+		WONDER_VERSION_3_4_1, -1 },
 };
 
 static bool wonder_ver_can_support(enum wondertap_ver device_ver, enum wondertap_ver driver_ver)
 {
 	int i;
+	int ver = driver_ver - WONDER_VERSION_AUX_BASE;
 
-	if (driver_ver < 0 || driver_ver >= WONDER_VERSION_MAX)
+	if (ver < 0 || driver_ver >= WONDER_VERSION_MAX)
 		return false;
 
 	for (i = 0; i < WONDER_MAX_COMPAT_VERSIONS; i++) {
-		if (wonder_ver_match_table[driver_ver][i] == -1)
+		if (wonder_ver_match_table[ver][i] == -1)
 			break;
-		if (wonder_ver_match_table[driver_ver][i] == device_ver)
+		if (wonder_ver_match_table[ver][i] == device_ver)
 			return true;
 	}
 	return false;
@@ -66,7 +71,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 
 	wondertap = &wonder->wondertap_data;
 	/* Assign wondertap interface version will be used in the match process. */
-	wondertap->ver = WONDER_VERSION_1_5_1;
+	wondertap->ver = WONDER_VERSION_3_6_1;
 
 	auxiliary_set_drvdata(&wonder_adev->adev, wonder);
 
