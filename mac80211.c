@@ -510,8 +510,9 @@ static int wonder_sanity_check(struct wonder_data *wonder)
 
 static int wonder_tx_setup(struct wonder_data *wonder)
 {
-	wonder->vdev->mtu = INT_MAX;
+	struct net_device *dev =wonder->vdev;
 
+	dev_set_mtu(dev, dev->max_mtu ? 1500 : INT_MAX);
 	return 0;
 }
 
