@@ -67,13 +67,13 @@ enum wondertap_rate_bw {
 	WONDERTAP_RATE_BW_80 = 2,
 	WONDERTAP_RATE_BW_160 = 3,
 	WONDERTAP_RATE_BW_320 = 4,
+	WONDERTAP_RATE_BW_NONE = 0xff,
 };
 
 /** @brief Defines the role in the channel hopping list. */
 enum wondertap_role {
 	WONDERTAP_ROLE_NOP,
 	WONDERTAP_ROLE_STA,
-	WONDERTAP_ROLE_SCAN,
 	WONDERTAP_ROLE_MAX,
 };
 
@@ -563,6 +563,7 @@ enum wondertap_ver {
 	WONDER_VERSION_3_5,
 	WONDER_VERSION_3_5_1,
 	WONDER_VERSION_3_6_1,
+	WONDER_VERSION_3_6_2 = WONDER_VERSION_3_6_1,
 	WONDER_VERSION_MAX,
 };
 
