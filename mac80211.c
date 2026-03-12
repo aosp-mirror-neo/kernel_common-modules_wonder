@@ -387,9 +387,7 @@ static void syna_rx_handler(struct wonder_data *wonder, struct sk_buff *skb)
 
 	if (ieee80211_is_data(hdr->frame_control)) {
 		/* TODO: Workaround to remove 4 byte tailer for syna in legacy data frame. */
-		if (!ieee80211_is_data_qos(hdr->frame_control)) {
-			skb->len -= 4;
-		} else {
+		if (ieee80211_is_data_qos(hdr->frame_control)) {
 			/* TODO: Workaround to remove 2 byte tailer for syna in QoS AMSDU frame. */
 			qos = ieee80211_get_qos_ctl((struct ieee80211_hdr *)hdr);
 			if (qos[0] & IEEE80211_QOS_CTL_A_MSDU_PRESENT) {
@@ -733,9 +731,38 @@ static void wonder_configure_filter(struct ieee80211_hw *hw,
 }
 
 static void wonder_handle_tx_queue(struct ieee80211_hw *hw,
-								struct ieee80211_txq *txq)
+								int ac)
 {
-	ieee80211_handle_wake_tx_queue(hw, txq);
+	struct ieee80211_txq *queue = NULL;
+	struct sk_buff *skb;
+	struct ieee80211_tx_control control;
+
+	ieee80211_txq_schedule_start(hw, ac);
+	while ((queue = ieee80211_next_txq(hw, ac))) {
+		memset(&control, 0, sizeof(control));
+		control.sta = queue->sta;
+		while (1) {
+			skb = ieee80211_tx_dequeue(hw, queue);
+			if (!skb)
+				break;
+
+			wonder_tx(hw, &control, skb);
+		}
+		ieee80211_return_txq(hw, queue, false);
+	}
+	ieee80211_txq_schedule_end(hw, ac);
+	return;
+}
+
+static void wonder_flush_worker(struct work_struct *work)
+{
+	struct wonder_data *wonder = container_of(work, struct wonder_data, tx_work.work);
+	struct ieee80211_hw *hw = wonder->hw;
+	int ac;
+
+	/* Flush all AC queues */
+	for (ac = 0; ac < NL80211_NUM_ACS; ac++)
+		wonder_handle_tx_queue(hw, ac);
 }
 
 static void wonder_wake_tx_queue(struct ieee80211_hw *hw,
@@ -757,9 +784,18 @@ static void wonder_wake_tx_queue(struct ieee80211_hw *hw,
 		"Waking up TXQ for AC %d, mac80211 has %lu frames (%lu bytes) pending\n",
 		txq->ac, frame_count, byte_count);
 	}
-	/* Airtime fairness support. */
-	if (!wonder->tx_stop)
-		wonder_handle_tx_queue(hw, txq);
+	/* Aggregation Logic: Wait for more packets if size is small */
+	if (wonder->amsdu_enable) {
+		if (byte_count > wonder->amsdu_threshold) {
+			schedule_delayed_work(&wonder->tx_work, 0);
+		} else {
+			/* Schedule flush to prevent packets stuck */
+			schedule_delayed_work(&wonder->tx_work,
+				usecs_to_jiffies(wonder->amsdu_delay));
+		}
+	} else {
+		wonder_handle_tx_queue(hw, txq->ac);
+	}
 }
 
 static void wonder_channel_switch(struct ieee80211_hw *hw,
@@ -877,7 +913,8 @@ static bool wonder_amsdu_sanity(struct ieee80211_hw *hw,
 					     struct sk_buff *head,
 					     struct sk_buff *skb)
 {
-	pr_debug("TX AMSDU sanity check.\n");
+	if (IS_ENABLED(CONFIG_ANDROID_WONDER_TX_DEBUG))
+		pr_debug("TX AMSDU sanity check.\n");
 	return true;
 }
 
@@ -950,6 +987,8 @@ int wonder_features_init(struct wonder_data *wonder)
 	wonder_get_regulator_domain(hw);
 	/* Initial tx status queue */
 	wonder_txs_queue_init();
+	/* Initialize Delayed Work for TX Aggregation */
+	INIT_DELAYED_WORK(&wonder->tx_work, wonder_flush_worker);
 	/* Prepare wondertap structure */
 	wondertap_prep(&wonder->wondertap_data);
 	return 0;
@@ -957,6 +996,7 @@ int wonder_features_init(struct wonder_data *wonder)
 
 void wonder_features_exit(struct wonder_data *wonder)
 {
+	cancel_delayed_work_sync(&wonder->tx_work);
 	wonder_txs_queue_exit();
 	ieee80211_unregister_hw(wonder->hw);
 	pr_debug("Wonder Virtual Soft-MAC Driver unloaded successfully.\n");
@@ -983,7 +1023,9 @@ void *wonder_mac80211_init(void)
 	wonder->data_version = WONDER_DATA_80211_RADIOTAP;
 	wonder->iftype = NL80211_IFTYPE_MONITOR;
 	wonder->config_filters = 0;
-	wonder->tx_stop = false;
+	wonder->amsdu_enable = false;
+	wonder->amsdu_threshold = 8000;
+	wonder->amsdu_delay = 2000;
 	/* Set Band Capabilities */
 	hw->wiphy->bands[NL80211_BAND_2GHZ] = &wonder_band_2ghz;
 	hw->wiphy->bands[NL80211_BAND_5GHZ] = &wonder_band_5ghz;

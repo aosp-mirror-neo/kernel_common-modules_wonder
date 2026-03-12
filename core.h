@@ -36,10 +36,13 @@ struct wonder_data {
 	u8 data_version;
 	enum nl80211_iftype iftype;
 	unsigned int config_filters;
-	bool tx_stop;
+	bool amsdu_enable;
+	u32 amsdu_threshold;
+	u32 amsdu_delay;
 	struct wondertap_data wondertap_data;
 	struct work_struct pdev_down_work;
 	struct notifier_block netdev_notifier;
+	struct delayed_work tx_work;
 };
 
 #endif /* __WONDER_CORE_H__ */
