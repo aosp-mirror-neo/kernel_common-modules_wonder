@@ -48,35 +48,6 @@ static int wonder_capabilities_show(struct seq_file *m, void *v)
 }
 DEFINE_SHOW_ATTRIBUTE(wonder_capabilities);
 
-static ssize_t wonder_force_stop_tx_write(struct file *file,
-					  const char __user *user_buf,
-					  size_t count, loff_t *ppos)
-{
-	struct wonder_data *wonder = file->private_data;
-	bool stop;
-	int ret;
-
-	if (!wonder || !wonder->vdev) {
-		pr_err("vdev not available\n");
-		return -ENODEV;
-	}
-
-	ret = kstrtobool_from_user(user_buf, count, &stop);
-	if (ret)
-		return ret;
-
-	wonder->tx_stop = stop;
-
-	return count;
-}
-
-static const struct file_operations fops_force_stop_tx = {
-	.owner = THIS_MODULE,
-	.write = wonder_force_stop_tx_write,
-	.open = simple_open,
-	.llseek = noop_llseek,
-};
-
 static int wonder_channel_status_report_show(struct seq_file *m, void *v)
 {
 	struct wonder_data *wonder = m->private;
@@ -173,17 +144,22 @@ void wonder_debugfs_init(void *wonder)
 {
 	struct dentry *wonder_debugfs_root;
 
+
 	wonder_debugfs_root = debugfs_create_dir("wonder", NULL);
-	debugfs_create_file("force_stop_tx", 0200, wonder_debugfs_root,
-			    wonder, &fops_force_stop_tx);
+
 	debugfs_create_file("version", 0400, wonder_debugfs_root, wonder, &wonder_version_fops);
 	debugfs_create_file("capabilities", 0400, wonder_debugfs_root, wonder,
 			    &wonder_capabilities_fops);
-
-	debugfs_create_file("channel_status_report", 0400, wonder_debugfs_root,
+	debugfs_create_file("channel_status_report", 0644, wonder_debugfs_root,
 			    wonder, &wonder_channel_status_report_fops);
-	debugfs_create_file("channel_schedule_request", 0400, wonder_debugfs_root,
+	debugfs_create_file("channel_schedule_request", 0644, wonder_debugfs_root,
 			    wonder, &wonder_channel_schedule_request_fops);
+	debugfs_create_bool("amsdu_enable", 0644, wonder_debugfs_root,
+			    &((struct wonder_data *)wonder)->amsdu_enable);
+	debugfs_create_u32("amsdu_threshold", 0644, wonder_debugfs_root,
+			    &((struct wonder_data *)wonder)->amsdu_threshold);
+	debugfs_create_u32("amsdu_delay", 0644, wonder_debugfs_root,
+			    &((struct wonder_data *)wonder)->amsdu_delay);
 }
 
 void wonder_debugfs_exit(void)

@@ -72,7 +72,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 
 	wondertap = &wonder->wondertap_data;
 	/* Assign wondertap interface version will be used in the match process. */
-	wondertap->ver = WONDER_VERSION_3_6_2;
+	wondertap->ver = WONDER_VERSION_3_6_3;
 
 	auxiliary_set_drvdata(&wonder_adev->adev, wonder);
 
