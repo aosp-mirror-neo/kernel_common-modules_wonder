@@ -13,6 +13,13 @@ enum wondertap_state {
 #define WONDER_INIT_RETRY_CNT 5
 #define WONDER_INIT_RETRY_WAIT 400
 
+/* Maximum MCS index supported. */
+#define WONDERTAP_RA_MAX_MCS 7
+/* Maximum number of spatial streams supported. */
+#define WONDERTAP_RA_MAX_NSS 2
+/* Maximum operational bandwidth for rate selection. */
+#define WONDERTAP_RA_MAX_BW WONDERTAP_RATE_BW_80
+
 /*
  * Bitflags to track which cached values have been explicitly set
  * by the user.
