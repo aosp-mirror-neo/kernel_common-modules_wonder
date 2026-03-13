@@ -364,12 +364,11 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 	u8 hw_amsdu = wonder->wondertap_data.cap.bits.amsdu_aggregation;
 	u8 hw_ampdu = wonder->wondertap_data.cap.bits.ampdu_aggregation;
 	const size_t reply_skb_size = sizeof(u32) + sizeof(u8)*2;
+	bool is_ibss_mode = (wdev->iftype == NL80211_IFTYPE_ADHOC) ? true : false;
+	u32 mtu_size = is_ibss_mode ? WONDER_IBSS_MODE_MTU_SIZE : INT_MAX;
 
-	if (!wonder->vdev)
-		return -ENODEV;
-
-	pr_debug("Handling GET_CAP. MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u\n",
-		wonder->vdev->mtu, hw_amsdu, hw_ampdu);
+	pr_debug("Handling is_ibss_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u\n",
+		is_ibss_mode, mtu_size, hw_amsdu, hw_ampdu);
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(reply_skb_size));
 	if (!skb) {
@@ -378,7 +377,7 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 	}
 
 	/* Put the MTU length attribute into the skb. */
-	if (nla_put(skb, WONDER_VEN_ATTR_CAP_MTU, sizeof(u32), &wonder->vdev->mtu)) {
+	if (nla_put(skb, WONDER_VEN_ATTR_CAP_MTU, sizeof(u32), &mtu_size)) {
 		pr_err("Failed to put CAP MTU attribute\n");
 		kfree_skb(skb);
 		return -EMSGSIZE;

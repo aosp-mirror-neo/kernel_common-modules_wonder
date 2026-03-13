@@ -64,6 +64,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 	struct wonder_data *wonder;
 	struct wondertap_data *wondertap;
 	struct device *dev = &wonder_adev->adev.dev;
+	int ret;
 
 	wonder = wonder_mac80211_init();
 	if (!wonder)
@@ -87,6 +88,11 @@ static int wonder_probe(struct auxiliary_device *adev,
 	dev_dbg(dev, "%s(): Connected to wlan ver %d (cur: wonder ver %d)!\n",
 		__func__, wonder_adev->ver, wondertap->ver);
 
+	ret = wondertap_get_capabilities(wondertap, &wondertap->cap);
+	if (ret) {
+		dev_err(dev, "Failed to get wondertap capabilities, error: %d\n", ret);
+		return ret;
+	}
 	wonder_debugfs_init(wonder);
 
 	return 0;
