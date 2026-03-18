@@ -361,14 +361,15 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct wonder_data *wonder = hw->priv;
 	struct sk_buff *skb;
+	const size_t reply_skb_size = sizeof(u32) + sizeof(u8) * 3;
 	u8 hw_amsdu = wonder->wondertap_data.cap.bits.amsdu_aggregation;
 	u8 hw_ampdu = wonder->wondertap_data.cap.bits.ampdu_aggregation;
-	const size_t reply_skb_size = sizeof(u32) + sizeof(u8)*2;
+	u8 ch_hopping = wonder->wondertap_data.cap.bits.channel_hopping;
 	bool is_ibss_mode = (wdev->iftype == NL80211_IFTYPE_ADHOC) ? true : false;
 	u32 mtu_size = is_ibss_mode ? WONDER_IBSS_MODE_MTU_SIZE : INT_MAX;
 
-	pr_debug("Handling is_ibss_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u\n",
-		is_ibss_mode, mtu_size, hw_amsdu, hw_ampdu);
+	pr_debug("Handling is_ibss_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u, CH_HOPPING: %u\n",
+		is_ibss_mode, mtu_size, hw_amsdu, hw_ampdu, ch_hopping);
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(reply_skb_size));
 	if (!skb) {
@@ -391,6 +392,12 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 
 	if (nla_put(skb, WONDER_VEN_ATTR_CAP_HW_AMPDU, sizeof(u8), &hw_ampdu)) {
 		pr_err("Failed to put CAP HW_AMPDU attribute\n");
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	if (nla_put(skb, WONDER_VEN_ATTR_CAP_CH_HOPPING, sizeof(u8), &ch_hopping)) {
+		pr_err("Failed to put CAP CH_HOPPING attribute\n");
 		kfree_skb(skb);
 		return -EMSGSIZE;
 	}
