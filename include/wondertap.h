@@ -115,6 +115,76 @@ struct channel_schedule_request {
 	struct wondertap_channel_list_params *channel_list;
 };
 
+/**
+ * @brief Represents the status and statistics of a visited channel.
+ */
+struct wondertap_channel_status {
+	/**
+	 * @brief Target switch time TSF of this channel switch.
+	 */
+	u32 channel_switch_tsf;
+
+	/**
+	 * @brief Channel frequency in MHz.
+	 */
+	u32 freq;
+
+	/**
+	 * @brief TSF timestamp when the channel was actually switched to and started operating.
+	 */
+	u32 channel_start_tsf;
+
+	/**
+	 * @brief TSF timestamp when the channel operation ended.
+	 */
+	u32 channel_end_tsf;
+
+	/**
+	 * @brief Number of TX frames transmitted on this channel.
+	 */
+	u32 tx_frames;
+
+	/**
+	 * @brief Number of TX bytes transmitted on this channel.
+	 */
+	u64 tx_bytes;
+
+	/**
+	 * @brief Number of RX frames received on this channel.
+	 */
+	u32 rx_frames;
+
+	/**
+	 * @brief Number of RX bytes received on this channel.
+	 */
+	u64 rx_bytes;
+};
+
+/**
+ * @brief Parameters for channel status report.
+ */
+struct wondertap_channel_status_report {
+	/**
+	 * @brief TSF timestamp of the current channel hopping request.
+	 */
+	u32 current_channel_hopping_request_tsf;
+
+	/**
+	 * @brief Index of the current channel in the channel hopping list.
+	 */
+	u32 current_channel_index;
+
+	/**
+	 * @brief Number of elements in the status array.
+	 */
+	u32 channel_status_len;
+
+	/**
+	 * @brief Variable-length array of channel status entries.
+	 */
+	struct wondertap_channel_status status[];
+};
+
 /** @brief Defines the Guard Interval (GI). */
 enum wondertap_rate_gi {
 	WONDERTAP_RATE_GI_DEFAULT = 0, /* Driver uses default (e.g., Long GI or 0.8us) */
@@ -544,6 +614,15 @@ struct wondertap_ops {
 	 * Return: 0 on success, negative error code.
 	 */
 	int (*get_mac_tsf)(void *handle, u32 *mac_tsf);
+
+	/**
+	 * @brief Schedules a channel switch request.
+	 * @param handle The driver instance handle.
+	 * @param get A pointer to the channel status report.
+	 * @return 0 on success, negative error code.
+	 */
+	int (*get_channel_status_report)(void *handle,
+		struct wondertap_channel_status_report *report);
 };
 
 /**
