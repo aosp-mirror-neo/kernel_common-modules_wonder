@@ -77,6 +77,61 @@ static const struct file_operations fops_force_stop_tx = {
 	.llseek = noop_llseek,
 };
 
+static int wonder_channel_status_report_show(struct seq_file *m, void *v)
+{
+	struct wonder_data *wonder = m->private;
+	struct wondertap_data *wondertap = &wonder->wondertap_data;
+	struct wondertap_channel_status_report *report;
+	u32 num_channels;
+	size_t size;
+	int ret, i;
+
+	mutex_lock(&wondertap->lock);
+	num_channels = wondertap->cached_channel_schedule.channel_list_len;
+	mutex_unlock(&wondertap->lock);
+
+	if (num_channels == 0) {
+		seq_puts(m, "Channel hopping list is empty.\n");
+		return 0;
+	}
+
+	size = sizeof(*report) + num_channels * sizeof(struct wondertap_channel_status);
+	report = kzalloc(size, GFP_KERNEL);
+	if (!report)
+		return -ENOMEM;
+
+	report->channel_status_len = num_channels;
+	ret = wondertap_get_channel_status_report(wondertap, report);
+	if (ret) {
+		seq_printf(m, "Failed to get channel status report: %d\n", ret);
+		kfree(report);
+		return 0;
+	}
+
+	seq_printf(m, "Current Hopping Request TSF: 0x%08x\n",
+		report->current_channel_hopping_request_tsf);
+	seq_printf(m, "Current Channel Index: %u\n", report->current_channel_index);
+	seq_printf(m, "Channel Status Length: %u\n", report->channel_status_len);
+
+	for (i = 0; i < report->channel_status_len; i++) {
+		struct wondertap_channel_status *status = &report->status[i];
+
+		seq_printf(m, "\n  [%d] Freq: %u MHz\n", i, status->freq);
+		seq_printf(m, "      Switch TSF: 0x%08x\n", status->channel_switch_tsf);
+		seq_printf(m, "      Start TSF:  0x%08x\n", status->channel_start_tsf);
+		seq_printf(m, "      End TSF:    0x%08x\n", status->channel_end_tsf);
+		seq_printf(m, "      TX: %u frames, %llu bytes\n", status->tx_frames,
+			status->tx_bytes);
+		seq_printf(m, "      RX: %u frames, %llu bytes\n", status->rx_frames,
+			status->rx_bytes);
+	}
+
+	kfree(report);
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(wonder_channel_status_report);
+
 void wonder_debugfs_init(void *wonder)
 {
 	struct dentry *wonder_debugfs_root;
@@ -87,6 +142,9 @@ void wonder_debugfs_init(void *wonder)
 	debugfs_create_file("version", 0400, wonder_debugfs_root, wonder, &wonder_version_fops);
 	debugfs_create_file("capabilities", 0400, wonder_debugfs_root, wonder,
 			    &wonder_capabilities_fops);
+
+	debugfs_create_file("channel_status_report", 0400, wonder_debugfs_root,
+			    wonder, &wonder_channel_status_report_fops);
 }
 
 void wonder_debugfs_exit(void)

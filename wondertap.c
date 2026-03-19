@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
-#define pr_fmt(fmt) "[wonder][wondertap] " fmt
+/*
+ * Google Wonder WiFi Virtual Soft-MAC Driver
+ *
+ * Vendor interface implementation.
+ */
 #define LOG_MODULE_NAME "wondertap"
+#define pr_fmt(fmt) "[wonder][wondertap] " fmt
 
+#include <asm-generic/errno.h>
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/etherdevice.h>
@@ -394,6 +400,50 @@ int wondertap_channel_schedule_request(struct wondertap_data *wondertap,
 		}
 	}
 	pr_debug("==================================================\n");
+
+out_unlock:
+	mutex_unlock(&wondertap->lock);
+	return ret;
+}
+
+int wondertap_get_channel_status_report(struct wondertap_data *wondertap,
+				    struct wondertap_channel_status_report *report)
+{
+	int ret = 0;
+	struct channel_schedule_request *cached_schedule = &wondertap->cached_channel_schedule;
+
+	mutex_lock(&wondertap->lock);
+
+	if (!wondertap_is_up(wondertap)) {
+		pr_warn("wondertap is inactive.\n");
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+
+	if (!wondertap->wonder_ops || !wondertap->wonder_ops->get_channel_status_report) {
+		pr_warn("wondertap is inactive.\n");
+		ret = -EOPNOTSUPP;
+		goto out_unlock;
+	}
+
+	if (!wondertap->cap.bits.channel_hopping ||
+		!wondertap->init_params.channel_hopping_enable) {
+		pr_warn("channel hopping is not enabled.\n");
+		ret = -EOPNOTSUPP;
+		goto out_unlock;
+	}
+
+	if (report->channel_status_len != cached_schedule->channel_list_len) {
+		pr_warn("channel list len is not matched (%d, %d).\n",
+			report->channel_status_len, cached_schedule->channel_list_len);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	ret = wondertap->wonder_ops->get_channel_status_report(wondertap->vendor_handle, report);
+
+	if (ret)
+		pr_err("Get channel status report failed %d.\n", ret);
 
 out_unlock:
 	mutex_unlock(&wondertap->lock);
