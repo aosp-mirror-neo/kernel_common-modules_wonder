@@ -132,6 +132,43 @@ static int wonder_channel_status_report_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(wonder_channel_status_report);
 
+static int wonder_channel_schedule_request_show(struct seq_file *m, void *v)
+{
+	struct wonder_data *wonder = m->private;
+	struct wondertap_data *wondertap = &wonder->wondertap_data;
+	struct channel_schedule_request *schedule;
+	int i;
+
+	mutex_lock(&wondertap->lock);
+	schedule = &wondertap->cached_channel_schedule;
+
+	if (schedule->channel_list_len == 0) {
+		seq_puts(m, "Channel hopping schedule list is empty.\n");
+		mutex_unlock(&wondertap->lock);
+		return 0;
+	}
+
+	seq_printf(m, "Channel List Length: %u\n", schedule->channel_list_len);
+	seq_printf(m, "Next Channel Index: %u\n", schedule->next_channel_index);
+	seq_printf(m, "Dwell Time (TU): %u\n", schedule->dwell_time_tu);
+	seq_printf(m, "Target Switch TSF: 0x%08x\n", schedule->target_switch_time_tsf);
+
+	seq_puts(m, "\nChannel List:\n");
+	if (schedule->channel_list) {
+		for (i = 0; i < schedule->channel_list_len; i++) {
+			seq_printf(m, "  [%d] Freq: %u MHz, BW: %u, Role: %u\n", i,
+				   schedule->channel_list[i].freq,
+				   schedule->channel_list[i].bandwidth,
+				   schedule->channel_list[i].role);
+		}
+	}
+
+	mutex_unlock(&wondertap->lock);
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(wonder_channel_schedule_request);
+
 void wonder_debugfs_init(void *wonder)
 {
 	struct dentry *wonder_debugfs_root;
@@ -145,6 +182,8 @@ void wonder_debugfs_init(void *wonder)
 
 	debugfs_create_file("channel_status_report", 0400, wonder_debugfs_root,
 			    wonder, &wonder_channel_status_report_fops);
+	debugfs_create_file("channel_schedule_request", 0400, wonder_debugfs_root,
+			    wonder, &wonder_channel_schedule_request_fops);
 }
 
 void wonder_debugfs_exit(void)
