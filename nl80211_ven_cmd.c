@@ -542,6 +542,110 @@ static int wonder_vendor_cmd_get_mac_tsf(struct wiphy *wiphy,
 	return cfg80211_vendor_cmd_reply(skb);
 }
 
+static int wonder_vendor_cmd_get_channel_status_report(struct wiphy *wiphy,
+						       struct wireless_dev *wdev,
+						       const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct wonder_data *wonder = hw->priv;
+	struct wondertap_data *wondertap = &wonder->wondertap_data;
+	struct wondertap_channel_status_report *report;
+	struct sk_buff *skb;
+	struct nlattr *list;
+	u32 num_channels;
+	size_t size;
+	int ret, i;
+
+	mutex_lock(&wondertap->lock);
+	num_channels = wondertap->cached_channel_schedule.channel_list_len;
+	mutex_unlock(&wondertap->lock);
+
+	if (num_channels == 0) {
+		pr_err("Channel hopping list is empty.\n");
+		return -EINVAL;
+	}
+
+	size = sizeof(*report) + num_channels * sizeof(struct wondertap_channel_status);
+	report = kzalloc(size, GFP_KERNEL);
+	if (!report)
+		return -ENOMEM;
+
+	report->channel_status_len = num_channels;
+	ret = wondertap_get_channel_status_report(wondertap, report);
+	if (ret) {
+		pr_err("Failed to get channel status report: %d\n", ret);
+		kfree(report);
+		return ret;
+	}
+
+	/* Calculate Netlink attribute sizes (header + list + array items) */
+	size = nla_total_size(sizeof(u32)) * 3 +
+	       nla_total_size(0) +
+	       num_channels * (nla_total_size(0) +
+			       nla_total_size(sizeof(u32)) * 6 +
+			       nla_total_size_64bit(sizeof(u64)) * 2);
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, size + 100);
+	if (!skb) {
+		pr_err("Failed to allocate reply skb\n");
+		kfree(report);
+		return -ENOMEM;
+	}
+
+	if (nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_REPORT_REQ_TSF,
+			report->current_channel_hopping_request_tsf) ||
+	    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_REPORT_CUR_IDX,
+			report->current_channel_index) ||
+	    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_REPORT_LEN,
+			report->channel_status_len))
+		goto nla_put_failure;
+
+	list = nla_nest_start(skb, WONDER_VEN_ATTR_CH_STATUS_REPORT_LIST);
+	if (!list)
+		goto nla_put_failure;
+
+	for (i = 0; i < report->channel_status_len; i++) {
+		struct nlattr *entry;
+		struct wondertap_channel_status *status = &report->status[i];
+
+		entry = nla_nest_start(skb, i + 1);
+		if (!entry)
+			goto nla_put_failure;
+
+		if (nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_SWITCH_TSF,
+				status->channel_switch_tsf) ||
+		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_FREQ,
+				status->freq) ||
+		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_START_TSF,
+				status->channel_start_tsf) ||
+		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_END_TSF,
+				status->channel_end_tsf) ||
+		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_TX_FRAMES,
+				status->tx_frames) ||
+		    nla_put_u64_64bit(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_TX_BYTES,
+				      status->tx_bytes,
+				      WONDER_VEN_ATTR_CH_STATUS_ENTRY_UNSPEC) ||
+		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_RX_FRAMES,
+				status->rx_frames) ||
+		    nla_put_u64_64bit(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_RX_BYTES,
+				      status->rx_bytes,
+				      WONDER_VEN_ATTR_CH_STATUS_ENTRY_UNSPEC))
+			goto nla_put_failure;
+
+		nla_nest_end(skb, entry);
+	}
+	nla_nest_end(skb, list);
+
+	kfree(report);
+	return cfg80211_vendor_cmd_reply(skb);
+
+nla_put_failure:
+	pr_err("Failed to put channel status report attribute\n");
+	kfree_skb(skb);
+	kfree(report);
+	return -EMSGSIZE;
+}
+
 static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 	{
 		.info = {
@@ -622,6 +726,15 @@ static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wonder_vendor_cmd_get_mac_tsf,
+		.policy = VENDOR_CMD_RAW_DATA,
+	},
+	{
+		.info = {
+			.vendor_id = WONDER_VENDOR_ID,
+			.subcmd = WONDER_VEN_SUBCMD_GET_CHANNEL_STATUS_REPORT
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wonder_vendor_cmd_get_channel_status_report,
 		.policy = VENDOR_CMD_RAW_DATA,
 	},
 };
