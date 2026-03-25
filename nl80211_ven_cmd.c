@@ -223,6 +223,64 @@ static int wonder_vendor_cmd_set_filter(struct wiphy *wiphy,
 	return ret;
 }
 
+static bool wonder_tx_rate_sanity_check(u32 preamble, u32 bw, u32 gi, u8 nss, u8 mcs)
+{
+	if (preamble == WONDERTAP_RATE_PREAMBLE_HT) {
+		/* HT MCS Index: NSS1(0-7), NSS2(8-15), NSS3(16-23), NSS4(24-31) */
+		u8 min_mcs = (nss - 1) * 8;
+		u8 max_mcs = min_mcs + 7;
+
+		/* HT (802.11n) max 40MHz and max 4 NSS */
+		if (bw > WONDERTAP_RATE_BW_40) {
+			pr_warn("HT: Invalid BW %u (Max 40MHz)\n", bw);
+			return false;
+		}
+
+		if (nss < 1 || nss > 4) {
+			pr_warn("HT: Invalid NSS %u (Max 4)\n", nss);
+			return false;
+		}
+
+		if (mcs < min_mcs || mcs > max_mcs) {
+			pr_warn("HT: Invalid MCS %u for NSS %u (Expected %u-%u)\n",
+				mcs, nss, min_mcs, max_mcs);
+			return false;
+		}
+
+		if (gi > WONDERTAP_RATE_GI_0_8_US) {
+			pr_warn("Invalid GI %u (HT only support 0.8 or 0.4)\n", gi);
+			return false;
+		}
+	} else if (preamble == WONDERTAP_RATE_PREAMBLE_VHT) {
+		/* VHT (802.11ac) max 160MHz and max 8 NSS */
+		if (bw > WONDERTAP_RATE_BW_160) {
+			pr_warn("VHT: Invalid BW %u (Max 160MHz)\n", bw);
+			return false;
+		}
+
+		if (nss < 1 || nss > 8) {
+			pr_warn("VHT: Invalid NSS %u (Max 8)\n", nss);
+			return false;
+		}
+
+		/* VHT MCS is independent of NSS, max 9 (256-QAM) */
+		if (mcs > 9) {
+			pr_warn("VHT: Invalid MCS %u (Max 9)\n", mcs);
+			return false;
+		}
+
+		if (gi > WONDERTAP_RATE_GI_0_8_US) {
+			pr_warn("Invalid GI %u (VHT only support 0.8 or 0.4)\n", gi);
+			return false;
+		}
+	} else {
+		pr_err("Unsupported preamble type: %u\n", preamble);
+		return false;
+	}
+
+	return true;
+}
+
 static int wonder_vendor_cmd_set_fixed_tx_rate(struct wiphy *wiphy,
 								struct wireless_dev *wdev,
 								const void *data, int data_len)
@@ -255,6 +313,12 @@ static int wonder_vendor_cmd_set_fixed_tx_rate(struct wiphy *wiphy,
 
 	pr_debug("Set fixed TX rate: preamble=%u, bw=%u, gi=%u, nss=%u, mcs=%u\n",
 				params.preamble, params.bw, params.gi, params.nss, params.mcs);
+
+	if (!wonder_tx_rate_sanity_check(params.preamble, params.bw, params.gi,
+		params.nss, params.mcs)) {
+		pr_warn("Invalid TX rate.\n");
+		return -EINVAL;
+	}
 
 	return wondertap_set_fixed_tx_rate(&wonder->wondertap_data, &params);
 }
