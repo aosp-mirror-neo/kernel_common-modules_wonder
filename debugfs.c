@@ -156,6 +156,8 @@ void wonder_debugfs_init(void *wonder)
 			    wonder, &wonder_channel_schedule_request_fops);
 	debugfs_create_bool("amsdu_enable", 0644, wonder_debugfs_root,
 			    &((struct wonder_data *)wonder)->amsdu_enable);
+	debugfs_create_bool("ampdu_enable", 0644, wonder_debugfs_root,
+			    &((struct wonder_data *)wonder)->ampdu_enable);
 	debugfs_create_u32("amsdu_threshold", 0644, wonder_debugfs_root,
 			    &((struct wonder_data *)wonder)->amsdu_threshold);
 	debugfs_create_u32("amsdu_delay", 0644, wonder_debugfs_root,
