@@ -141,16 +141,6 @@ drop:
 	return RX_HANDLER_CONSUMED;
 }
 
-static rx_handler_result_t wonder_rx_8023_frame(struct wonder_data *wonder, struct sk_buff *skb)
-{
-	/* Change the skb's dev pointer to the virtual device */
-	if (wonder->vdev)
-		skb->dev = wonder->vdev;
-	netif_rx(skb);
-
-	return RX_HANDLER_CONSUMED;
-}
-
 static rx_handler_result_t wonder_rx_monitor_handler(struct wonder_data *wonder,
 	struct sk_buff **pskb)
 {
@@ -162,13 +152,7 @@ static rx_handler_result_t wonder_rx_monitor_handler(struct wonder_data *wonder,
 	 *    skb_reset_mac_header(skb);
 	 *    skb->protocol = htons(ETH_P_802_2);
 	 */
-	/* LLC */
-	if (skb->protocol == htons(ETH_P_802_2))
-		return wonder_rx_80211_frame(wonder, skb);
-	else if (0 && skb->protocol == htons(ETH_P_802_3))
-		return wonder_rx_8023_frame(wonder, skb);
-
-	return RX_HANDLER_PASS;
+	return wonder_rx_80211_frame(wonder, skb);
 }
 
 static bool wonder_80211_common_filter(struct wonder_data *wonder,
@@ -918,6 +902,59 @@ static bool wonder_amsdu_sanity(struct ieee80211_hw *hw,
 	return true;
 }
 
+static int wonder_ampdu_action(struct ieee80211_hw *hw,
+			    struct ieee80211_vif *vif,
+			    struct ieee80211_ampdu_params *params)
+{
+	struct wonder_data *wonder = hw->priv;
+
+	if (!wonder->ampdu_enable)
+		return -EOPNOTSUPP;
+
+	switch (params->action) {
+	case IEEE80211_AMPDU_TX_START:
+		pr_debug("AMPDU TX START: sta=%pM, tid=%d, buf_size=%d, ssn=%d\n",
+			    params->sta->addr, params->tid, params->buf_size, params->ssn);
+		/*
+		 * TODO: Notify Vendor Driver
+		 * Prepare a TX Queue. The maximum number of aggregated packets must not exceed
+		 * params->buf_size. From now on, packets for this TID entering wonder_tx()
+		 * can be encapsulated into A-MPDU.
+		 */
+		ieee80211_start_tx_ba_cb_irqsafe(vif, params->sta->addr, params->tid);
+		break;
+	case IEEE80211_AMPDU_TX_STOP_CONT:
+	case IEEE80211_AMPDU_TX_STOP_FLUSH:
+	case IEEE80211_AMPDU_TX_STOP_FLUSH_CONT:
+		ieee80211_stop_tx_ba_cb_irqsafe(vif, params->sta->addr, params->tid);
+		pr_debug("AMPDU TX STOP: sta=%pM, tid=%d, action=%d\n",
+			    params->sta->addr, params->tid, params->action);
+		break;
+	case IEEE80211_AMPDU_RX_START:
+		pr_debug("AMPDU RX START: sta=%pM, tid=%d, buf_size=%d, ssn=%d\n",
+			    params->sta->addr, params->tid, params->buf_size, params->ssn);
+		/*
+		 * TODO: Notify Vendor Driver
+		 * Prepare to receive the peer's A-MPDU and start de-aggregation.
+		 * Feed the de-aggregated single MPDUs directly to mac80211, which will handle
+		 * software reordering.
+		 */
+		break;
+	case IEEE80211_AMPDU_RX_STOP:
+		pr_debug("AMPDU RX STOP: sta=%pM, tid=%d\n",
+			    params->sta->addr, params->tid);
+		break;
+	case IEEE80211_AMPDU_TX_OPERATIONAL:
+		pr_debug("AMPDU RX STOP: sta=%pM, tid=%d\n",
+			    params->sta->addr, params->tid);
+		break;
+	default:
+		pr_err("Unknown AMPDU action %d\n", params->action);
+		break;
+	}
+
+	return 0;
+}
 
 static void wonder_sta_rate_tbl_update(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
@@ -964,6 +1001,7 @@ static const struct ieee80211_ops wonder_mac80211_ops = {
 	.change_chanctx     = ieee80211_emulate_change_chanctx,
 	/* --- AMSDU Support -- */
 	.can_aggregate_in_amsdu = wonder_amsdu_sanity,
+	.ampdu_action = wonder_ampdu_action,
 	/* --- Station Support --- */
 	.sta_rate_tbl_update = wonder_sta_rate_tbl_update,
 	/* -- ADHOC Support -- */
@@ -1023,9 +1061,11 @@ void *wonder_mac80211_init(void)
 	wonder->data_version = WONDER_DATA_80211_RADIOTAP;
 	wonder->iftype = NL80211_IFTYPE_MONITOR;
 	wonder->config_filters = 0;
+
+	wonder->ampdu_enable = false;
 	wonder->amsdu_enable = false;
 	wonder->amsdu_threshold = 8000;
-	wonder->amsdu_delay = 2000;
+	wonder->amsdu_delay = 3000;
 	/* Set Band Capabilities */
 	hw->wiphy->bands[NL80211_BAND_2GHZ] = &wonder_band_2ghz;
 	hw->wiphy->bands[NL80211_BAND_5GHZ] = &wonder_band_5ghz;
@@ -1044,6 +1084,8 @@ void *wonder_mac80211_init(void)
 	/* Support AMSDU */
 	ieee80211_hw_set(hw, TX_AMSDU);
 	ieee80211_hw_set(hw, SUPPORT_FAST_XMIT);
+	/* Support AMPDU */
+	ieee80211_hw_set(hw, AMPDU_AGGREGATION);
 	/*
 	 * NO_AUTO_VIF is set, so the kernel won't create a default interface.
 	 * Interfaces must now be created manually.

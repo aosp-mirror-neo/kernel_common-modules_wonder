@@ -36,6 +36,7 @@ struct wonder_data {
 	u8 data_version;
 	enum nl80211_iftype iftype;
 	unsigned int config_filters;
+	bool ampdu_enable;
 	bool amsdu_enable;
 	u32 amsdu_threshold;
 	u32 amsdu_delay;
