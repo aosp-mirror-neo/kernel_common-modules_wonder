@@ -10,6 +10,7 @@
 #include <linux/debugfs.h>
 #include <linux/netdevice.h>
 #include <linux/uaccess.h>
+#include <linux/etherdevice.h>
 #include <linux/seq_file.h>
 
 #include "core.h"
@@ -91,10 +92,8 @@ static int wonder_channel_status_report_show(struct seq_file *m, void *v)
 		seq_printf(m, "      Switch TSF: 0x%08x\n", status->channel_switch_tsf);
 		seq_printf(m, "      Start TSF:  0x%08x\n", status->channel_start_tsf);
 		seq_printf(m, "      End TSF:    0x%08x\n", status->channel_end_tsf);
-		seq_printf(m, "      TX: %u frames, %llu bytes\n", status->tx_frames,
-			status->tx_bytes);
-		seq_printf(m, "      RX: %u frames, %llu bytes\n", status->rx_frames,
-			status->rx_bytes);
+		seq_printf(m, "      TX Traffic Index: %u\n", status->tx_traffic_index);
+		seq_printf(m, "      RX Traffic Index: %u\n", status->rx_traffic_index);
 	}
 
 	kfree(report);
@@ -140,6 +139,110 @@ static int wonder_channel_schedule_request_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(wonder_channel_schedule_request);
 
+static int wonder_station_query_show(struct seq_file *m, void *v)
+{
+	struct wonder_data *wonder = m->private;
+	struct wondertap_data *wondertap = &wonder->wondertap_data;
+	struct wondertap_station_info sta_info = {0};
+	int ret;
+
+	mutex_lock(&wondertap->lock);
+	if (is_zero_ether_addr(wondertap->query_mac_addr)) {
+		seq_puts(m, "Please write a valid MAC address first.\n");
+		mutex_unlock(&wondertap->lock);
+		return 0;
+	}
+	memcpy(sta_info.mac, wondertap->query_mac_addr, ETH_ALEN);
+	mutex_unlock(&wondertap->lock);
+
+	if (wondertap->wonder_ops && wondertap->wonder_ops->set_station_info) {
+		ret = wondertap_set_station_info(wondertap,
+				WONDERTAP_STATION_STATE_QUERY, &sta_info);
+		if (ret) {
+			seq_printf(m, "Failed to query station info: %d\n", ret);
+			return 0;
+		}
+
+		seq_printf(m, "Station MAC: %pM\n", sta_info.mac);
+		seq_printf(m, "AID: %u\n", sta_info.aid);
+		seq_printf(m, "Capability Mask: 0x%08x\n", sta_info.capability_mask);
+
+		seq_printf(m, "    HT: %s, VHT: %s, HE: %s, HE_6G: %s\n",
+			   (sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_HT)) ?
+				   "Y" : "N",
+			   (sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_VHT)) ?
+				   "Y" : "N",
+			   (sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_HE)) ?
+				   "Y" : "N",
+			   (sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_HE_6G)) ?
+				   "Y" : "N");
+
+		if (sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_HT))
+			seq_hex_dump(m, "    HT_CAP: ", DUMP_PREFIX_NONE,
+				     16, 1, &sta_info.ht_capa,
+				     sizeof(struct ieee80211_ht_cap), false);
+
+		if (sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_VHT))
+			seq_hex_dump(m, "    VHT_CAP: ", DUMP_PREFIX_NONE,
+				     16, 1, &sta_info.vht_capa,
+				     sizeof(struct ieee80211_vht_cap), false);
+
+		if ((sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_HE)) &&
+		    sta_info.he_capa_len > 0)
+			seq_hex_dump(m, "    HE_CAP: ", DUMP_PREFIX_NONE,
+				     16, 1, &sta_info.he_capa,
+				     min_t(size_t, sta_info.he_capa_len, sizeof(sta_info.he_capa)),
+				     false);
+
+		if (sta_info.capability_mask & BIT(WONDERTAP_STATION_CAP_HE_6G))
+			seq_hex_dump(m, "    HE_6G_CAP: ", DUMP_PREFIX_NONE,
+				     16, 1, &sta_info.he_6ghz_capa,
+				     sizeof(struct ieee80211_he_6ghz_capa), false);
+	} else {
+		seq_puts(m, "set_station_info op is not implemented by vendor.\n");
+	}
+
+	return 0;
+}
+
+static ssize_t wonder_station_query_write(struct file *file, const char __user *user_buf,
+					  size_t count, loff_t *ppos)
+{
+	struct seq_file *m = file->private_data;
+	struct wonder_data *wonder = m->private;
+	struct wondertap_data *wondertap = &wonder->wondertap_data;
+	char buf[20];
+	size_t len;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, len))
+		return -EFAULT;
+	buf[len] = '\0';
+
+	mutex_lock(&wondertap->lock);
+	if (!mac_pton(buf, wondertap->query_mac_addr)) {
+		pr_err("Invalid MAC address format. Expected xx:xx:xx:xx:xx:xx\n");
+		mutex_unlock(&wondertap->lock);
+		return -EINVAL;
+	}
+	mutex_unlock(&wondertap->lock);
+
+	return count;
+}
+
+static int wonder_station_query_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, wonder_station_query_show, inode->i_private);
+}
+
+static const struct file_operations wonder_station_query_fops = {
+	.open = wonder_station_query_open,
+	.read = seq_read,
+	.write = wonder_station_query_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 void wonder_debugfs_init(void *wonder)
 {
 	struct dentry *wonder_debugfs_root;
@@ -154,6 +257,8 @@ void wonder_debugfs_init(void *wonder)
 			    wonder, &wonder_channel_status_report_fops);
 	debugfs_create_file("channel_schedule_request", 0644, wonder_debugfs_root,
 			    wonder, &wonder_channel_schedule_request_fops);
+	debugfs_create_file("station_query", 0644, wonder_debugfs_root,
+			    wonder, &wonder_station_query_fops);
 	debugfs_create_bool("amsdu_enable", 0644, wonder_debugfs_root,
 			    &((struct wonder_data *)wonder)->amsdu_enable);
 	debugfs_create_bool("ampdu_enable", 0644, wonder_debugfs_root,

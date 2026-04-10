@@ -7,6 +7,7 @@
  * translates standard mac80211 calls into proprietary vendor driver functions.
  */
 #define pr_fmt(fmt) "[wonder][mac80211] " fmt
+
 #define LOG_MODULE_NAME "mac80211"
 
 #include <linux/netdevice.h>
@@ -18,6 +19,7 @@
 #include <linux/version.h>
 #include <linux/limits.h>
 
+#include "wondertap.h"
 #include "core.h"
 #include "mac80211.h"
 #include "mac80211_txs.h"
@@ -956,6 +958,62 @@ static int wonder_ampdu_action(struct ieee80211_hw *hw,
 	return 0;
 }
 
+static int wonder_update_station_state(struct ieee80211_hw *hw,
+			struct ieee80211_sta *sta,
+			enum wondertap_station_action action)
+{
+	struct wondertap_station_info sta_info;
+	struct ieee80211_link_sta *link_sta = &sta->deflink;
+	struct wonder_data *wonder = hw->priv;
+
+	memset(&sta_info, 0, sizeof(sta_info));
+	sta_info.aid = sta->aid;
+	memcpy(sta_info.mac, sta->addr, ETH_ALEN);
+
+	if (link_sta->ht_cap.ht_supported) {
+		sta_info.ht_capa.cap_info = link_sta->ht_cap.cap;
+		sta_info.ht_capa.ampdu_params_info = 0x1f;
+		sta_info.ht_capa.mcs = link_sta->ht_cap.mcs;
+		sta_info.capability_mask |= BIT(WONDERTAP_STATION_CAP_HT);
+	}
+
+	if (link_sta->vht_cap.vht_supported) {
+		sta_info.vht_capa.vht_cap_info = link_sta->vht_cap.cap;
+		sta_info.vht_capa.supp_mcs = link_sta->vht_cap.vht_mcs;
+		sta_info.capability_mask |= BIT(WONDERTAP_STATION_CAP_VHT);
+	}
+
+	if (link_sta->he_cap.has_he) {
+		sta_info.he_capa = link_sta->he_cap.he_cap_elem;
+		sta_info.he_capa_len = sizeof(link_sta->he_cap.he_cap_elem);
+		sta_info.capability_mask |= BIT(WONDERTAP_STATION_CAP_HE);
+	}
+
+	return wondertap_set_station_info(&wonder->wondertap_data, action, &sta_info);
+}
+
+static int wonder_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			struct ieee80211_sta *sta)
+{
+	wonder_update_station_state(hw, sta, WONDERTAP_STATION_STATE_NEW);
+	return 0;
+}
+
+static void wonder_sta_rc_update(struct ieee80211_hw *hw,
+			      struct ieee80211_vif *vif,
+			      struct ieee80211_sta *sta,
+			      u32 changed)
+{
+	wonder_update_station_state(hw, sta, WONDERTAP_STATION_STATE_UPDATE);
+}
+
+static int wonder_sta_remove(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			struct ieee80211_sta *sta)
+{
+	wonder_update_station_state(hw, sta, WONDERTAP_STATION_STATE_DEL);
+	return 0;
+}
+
 static void wonder_sta_rate_tbl_update(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_sta *sta)
@@ -999,6 +1057,9 @@ static const struct ieee80211_ops wonder_mac80211_ops = {
 	.can_aggregate_in_amsdu = wonder_amsdu_sanity,
 	.ampdu_action = wonder_ampdu_action,
 	/* --- Station Support --- */
+	.sta_add = wonder_sta_add,
+	.sta_remove = wonder_sta_remove,
+	.sta_rc_update = wonder_sta_rc_update,
 	.sta_rate_tbl_update = wonder_sta_rate_tbl_update,
 	/* -- ADHOC Support -- */
 	.tx_last_beacon = wonder_tx_last_beacon,
