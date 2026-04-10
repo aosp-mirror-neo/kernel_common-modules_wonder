@@ -14,6 +14,7 @@
 #include <wondertap.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <net/mac80211.h>
 
 #include "wondertap_internal.h"
 
@@ -444,6 +445,34 @@ int wondertap_get_channel_status_report(struct wondertap_data *wondertap,
 
 	if (ret)
 		pr_err("Get channel status report failed %d.\n", ret);
+
+out_unlock:
+	mutex_unlock(&wondertap->lock);
+	return ret;
+}
+
+int wondertap_set_station_info(struct wondertap_data *wondertap,
+		const enum wondertap_station_action action,
+		struct wondertap_station_info *info)
+{
+	int ret = 0;
+
+	mutex_lock(&wondertap->lock);
+
+	if (!wondertap_is_up(wondertap)) {
+		pr_warn("wondertap is inactive.\n");
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+
+	if (!wondertap->wonder_ops || !wondertap->wonder_ops->set_station_info) {
+		pr_warn("wondertap is inactive.\n");
+		ret = -EOPNOTSUPP;
+		goto out_unlock;
+	}
+
+	ret = wondertap->wonder_ops->set_station_info(
+		wondertap->vendor_handle, action, info);
 
 out_unlock:
 	mutex_unlock(&wondertap->lock);

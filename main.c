@@ -26,18 +26,11 @@ module_param(physical_name, charp, 0444);
 MODULE_PARM_DESC(physical_name, "Interface name to use (e.g., wlan0, radiotap0, ...)");
 
 #define WONDER_MAX_COMPAT_VERSIONS 5
-static int wonder_ver_match_table[WONDER_VERSION_MAX][WONDER_MAX_COMPAT_VERSIONS] = {
-	{ WONDER_VERSION_3_0, -1 },
-	{ WONDER_VERSION_3_1, -1 },
-	{ WONDER_VERSION_3_2, -1 },
-	{ WONDER_VERSION_3_3, -1 },
-	{ WONDER_VERSION_3_4, -1 },
-	{ WONDER_VERSION_3_4_1, WONDER_VERSION_3_4, -1 },
-	{ WONDER_VERSION_3_5, WONDER_VERSION_3_4, WONDER_VERSION_3_4_1, -1 },
-	{ WONDER_VERSION_3_5_1, WONDER_VERSION_3_4, WONDER_VERSION_3_5,
-		WONDER_VERSION_3_4_1, -1 },
-	{ WONDER_VERSION_3_6_1, WONDER_VERSION_3_4, WONDER_VERSION_3_5,
-		WONDER_VERSION_3_4_1, -1 },
+static int wonder_ver_match_table[WONDER_MAX_COMPAT_VERSIONS] = {
+	WONDER_VERSION_3_6_4,
+	WONDER_VERSION_3_6_3,
+	WONDER_VERSION_3_4,
+	-1,
 };
 
 static bool wonder_ver_can_support(enum wondertap_ver device_ver, enum wondertap_ver driver_ver)
@@ -49,9 +42,9 @@ static bool wonder_ver_can_support(enum wondertap_ver device_ver, enum wondertap
 		return false;
 
 	for (i = 0; i < WONDER_MAX_COMPAT_VERSIONS; i++) {
-		if (wonder_ver_match_table[ver][i] == -1)
+		if (wonder_ver_match_table[i] == -1)
 			break;
-		if (wonder_ver_match_table[ver][i] == device_ver)
+		if (wonder_ver_match_table[i] == device_ver)
 			return true;
 	}
 	return false;
@@ -72,8 +65,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 
 	wondertap = &wonder->wondertap_data;
 	/* Assign wondertap interface version will be used in the match process. */
-	wondertap->ver = WONDER_VERSION_3_6_3;
-
+	wondertap->ver = WONDER_VERSION_3_6_4;
 	auxiliary_set_drvdata(&wonder_adev->adev, wonder);
 
 	if (!wonder_ver_can_support(wonder_adev->ver, wondertap->ver)) {
