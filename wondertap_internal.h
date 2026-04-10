@@ -46,6 +46,8 @@ struct wondertap_data {
 	char cached_country_code[3];
 	enum wondertap_ver ver;
 	struct device_node *wlan_node;
+	/* MAC address for station query via debugfs */
+	u8 query_mac_addr[ETH_ALEN];
 	const struct wondertap_ops *wonder_ops;
 };
 
@@ -233,6 +235,19 @@ int wondertap_get_mac_tsf(struct wondertap_data *wondertap, u32 *mac_tsf);
  */
 int wondertap_get_channel_status_report(struct wondertap_data *wondertap,
 				    struct wondertap_channel_status_report *report);
+
+/**
+ * @brief Adds, updates, or removes station information in the vendor driver.
+ *
+ * @param wondertap A pointer to the wondertap instance data.
+ * @param action The action to perform on the station (NEW, UPDATE, or DEL).
+ * @param info A pointer to the station information structure.
+ *
+ * @return 0 on success, or a negative error code on failure.
+ */
+int wondertap_set_station_info(struct wondertap_data *wondertap,
+		const enum wondertap_station_action action,
+		struct wondertap_station_info *info);
 
 /**
  * @brief Register a vendor's wondertap operations.
