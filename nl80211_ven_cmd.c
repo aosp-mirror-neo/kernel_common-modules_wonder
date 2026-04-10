@@ -98,6 +98,18 @@ wonder_channel_list_entry_policy[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_MAX + 1] = {
 	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_ROLE),
 };
 
+static const struct nla_policy
+wonder_set_station_info_policy[WONDER_VEN_ATTR_STA_INFO_MAX + 1] = {
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_STA_INFO_ACTION),
+	WONDER_POL_BINARY(WONDER_VEN_ATTR_STA_INFO_MAC),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_STA_INFO_AID),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_STA_INFO_CAPABILITY_MASK),
+	[WONDER_VEN_ATTR_STA_INFO_HT_CAP] = { .type = NLA_BINARY },
+	[WONDER_VEN_ATTR_STA_INFO_VHT_CAP] = { .type = NLA_BINARY },
+	[WONDER_VEN_ATTR_STA_INFO_HE_CAP] = { .type = NLA_BINARY },
+	[WONDER_VEN_ATTR_STA_INFO_HE_6GHZ_CAP] = { .type = NLA_BINARY },
+};
+
 static int wonder_vendor_cmd_set_frequency(struct wiphy *wiphy,
 					   struct wireless_dev *wdev,
 					   const void *data, int data_len)
@@ -656,8 +668,8 @@ static int wonder_vendor_cmd_get_channel_status_report(struct wiphy *wiphy,
 	size = nla_total_size(sizeof(u32)) * 3 +
 	       nla_total_size(0) +
 	       num_channels * (nla_total_size(0) +
-			       nla_total_size(sizeof(u32)) * 6 +
-			       nla_total_size_64bit(sizeof(u64)) * 2);
+			       nla_total_size(sizeof(u32)) * 4 +
+			       nla_total_size(sizeof(u16)) * 2);
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, size + 100);
 	if (!skb) {
@@ -694,16 +706,10 @@ static int wonder_vendor_cmd_get_channel_status_report(struct wiphy *wiphy,
 				status->channel_start_tsf) ||
 		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_END_TSF,
 				status->channel_end_tsf) ||
-		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_TX_FRAMES,
-				status->tx_frames) ||
-		    nla_put_u64_64bit(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_TX_BYTES,
-				      status->tx_bytes,
-				      WONDER_VEN_ATTR_CH_STATUS_ENTRY_UNSPEC) ||
-		    nla_put_u32(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_RX_FRAMES,
-				status->rx_frames) ||
-		    nla_put_u64_64bit(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_RX_BYTES,
-				      status->rx_bytes,
-				      WONDER_VEN_ATTR_CH_STATUS_ENTRY_UNSPEC))
+		    nla_put_u16(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_TX_TRAFFIC_INDEX,
+				status->tx_traffic_index) ||
+		    nla_put_u16(skb, WONDER_VEN_ATTR_CH_STATUS_ENTRY_RX_TRAFFIC_INDEX,
+				status->rx_traffic_index))
 			goto nla_put_failure;
 
 		nla_nest_end(skb, entry);
@@ -718,6 +724,93 @@ nla_put_failure:
 	kfree_skb(skb);
 	kfree(report);
 	return -EMSGSIZE;
+}
+
+static int wonder_vendor_cmd_set_station_info(struct wiphy *wiphy,
+					      struct wireless_dev *wdev,
+					      const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct wonder_data *wonder = hw->priv;
+	struct nlattr *tb[WONDER_VEN_ATTR_STA_INFO_MAX + 1];
+	struct wondertap_station_info sta_info = {0};
+	enum wondertap_station_action action;
+
+	if (nla_parse(tb, WONDER_VEN_ATTR_STA_INFO_MAX, data, data_len,
+		      wonder_set_station_info_policy, NULL) < 0) {
+		pr_err("Failed to parse station info attributes\n");
+		return -EINVAL;
+	}
+
+	/* Check that mandatory attributes are present */
+	if (!tb[WONDER_VEN_ATTR_STA_INFO_ACTION] ||
+	    !tb[WONDER_VEN_ATTR_STA_INFO_MAC]) {
+		pr_err("Missing mandatory attributes for station info\n");
+		return -EINVAL;
+	}
+
+	action = nla_get_u32(tb[WONDER_VEN_ATTR_STA_INFO_ACTION]);
+
+	if (nla_len(tb[WONDER_VEN_ATTR_STA_INFO_MAC]) != ETH_ALEN) {
+		pr_err("Invalid MAC address length: %d\n", nla_len(tb[WONDER_VEN_ATTR_STA_INFO_MAC]));
+		return -EINVAL;
+	}
+	nla_memcpy(sta_info.mac, tb[WONDER_VEN_ATTR_STA_INFO_MAC], ETH_ALEN);
+
+	if (tb[WONDER_VEN_ATTR_STA_INFO_AID])
+		sta_info.aid = nla_get_u16(tb[WONDER_VEN_ATTR_STA_INFO_AID]);
+
+	if (tb[WONDER_VEN_ATTR_STA_INFO_CAPABILITY_MASK])
+		sta_info.capability_mask =
+			nla_get_u32(tb[WONDER_VEN_ATTR_STA_INFO_CAPABILITY_MASK]);
+
+	if (tb[WONDER_VEN_ATTR_STA_INFO_HT_CAP]) {
+		if (nla_len(tb[WONDER_VEN_ATTR_STA_INFO_HT_CAP]) ==
+		    sizeof(struct ieee80211_ht_cap))
+			memcpy(&sta_info.ht_capa,
+			       nla_data(tb[WONDER_VEN_ATTR_STA_INFO_HT_CAP]),
+			       sizeof(struct ieee80211_ht_cap));
+		else
+			return -EINVAL;
+	}
+
+	if (tb[WONDER_VEN_ATTR_STA_INFO_VHT_CAP]) {
+		if (nla_len(tb[WONDER_VEN_ATTR_STA_INFO_VHT_CAP]) ==
+		    sizeof(struct ieee80211_vht_cap))
+			memcpy(&sta_info.vht_capa,
+			       nla_data(tb[WONDER_VEN_ATTR_STA_INFO_VHT_CAP]),
+			       sizeof(struct ieee80211_vht_cap));
+		else
+			return -EINVAL;
+	}
+
+	if (tb[WONDER_VEN_ATTR_STA_INFO_HE_CAP]) {
+		size_t he_len = nla_len(tb[WONDER_VEN_ATTR_STA_INFO_HE_CAP]);
+
+		if (he_len <= sizeof(struct ieee80211_he_cap_elem)) {
+			memcpy(&sta_info.he_capa,
+			       nla_data(tb[WONDER_VEN_ATTR_STA_INFO_HE_CAP]),
+			       he_len);
+			sta_info.he_capa_len = he_len;
+		} else {
+			return -EINVAL;
+		}
+	}
+
+	if (tb[WONDER_VEN_ATTR_STA_INFO_HE_6GHZ_CAP]) {
+		if (nla_len(tb[WONDER_VEN_ATTR_STA_INFO_HE_6GHZ_CAP]) ==
+		    sizeof(struct ieee80211_he_6ghz_capa))
+			memcpy(&sta_info.he_6ghz_capa,
+			       nla_data(tb[WONDER_VEN_ATTR_STA_INFO_HE_6GHZ_CAP]),
+			       sizeof(struct ieee80211_he_6ghz_capa));
+		else
+			return -EINVAL;
+	}
+
+	pr_debug("SET_STATION_INFO: action=%u, mac=%pM, aid=%u, cap_mask=0x%x\n",
+		    action, sta_info.mac, sta_info.aid, sta_info.capability_mask);
+
+	return wondertap_set_station_info(&wonder->wondertap_data, action, &sta_info);
 }
 
 static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
@@ -809,6 +902,15 @@ static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wonder_vendor_cmd_get_channel_status_report,
+		.policy = VENDOR_CMD_RAW_DATA,
+	},
+	{
+		.info = {
+			.vendor_id = WONDER_VENDOR_ID,
+			.subcmd = WONDER_VEN_SUBCMD_SET_STATION_INFO
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wonder_vendor_cmd_set_station_info,
 		.policy = VENDOR_CMD_RAW_DATA,
 	},
 };
