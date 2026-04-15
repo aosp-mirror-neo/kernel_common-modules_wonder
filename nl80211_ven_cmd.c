@@ -582,23 +582,33 @@ static int wonder_vendor_cmd_get_mac_tsf(struct wiphy *wiphy,
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct wonder_data *wonder = hw->priv;
 	struct sk_buff *skb;
+	u64 sys_time_before;
+	u64 sys_time_after;
 	u32 mac_tsf;
 	int ret;
 
+	sys_time_before = ktime_get_ns();
 	ret = wondertap_get_mac_tsf(&wonder->wondertap_data, &mac_tsf);
+	sys_time_after = ktime_get_ns();
 	if (ret)
 		return ret;
 
-	pr_debug("Handling GET_MAC_TSF. Found TSF: %u\n", mac_tsf);
+	pr_debug("Handling GET_MAC_TSF. TSF: %u, sys_time_before: %llu, sys_time_after: %llu\n",
+		    mac_tsf, sys_time_before, sys_time_after);
 
-	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(sizeof(u32)));
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(sizeof(u32)) +
+						  nla_total_size(sizeof(u64)) * 2);
 	if (!skb) {
 		pr_err("Failed to allocate reply skb\n");
 		return -ENOMEM;
 	}
 
-	if (nla_put_u32(skb, WONDER_VEN_ATTR_MAC_TSF, mac_tsf)) {
-		pr_err("Failed to put MAC TSF attribute\n");
+	if (nla_put_u32(skb, WONDER_VEN_ATTR_MAC_TSF, mac_tsf) ||
+	    nla_put_u64_64bit(skb, WONDER_VEN_ATTR_MAC_TSF_SYS_TIME_BEFORE, sys_time_before,
+			      WONDER_VEN_ATTR_MAC_TSF_UNSPEC) ||
+	    nla_put_u64_64bit(skb, WONDER_VEN_ATTR_MAC_TSF_SYS_TIME_AFTER, sys_time_after,
+			      WONDER_VEN_ATTR_MAC_TSF_UNSPEC)) {
+		pr_err("Failed to put MAC TSF attributes\n");
 		kfree_skb(skb);
 		return -EMSGSIZE;
 	}
