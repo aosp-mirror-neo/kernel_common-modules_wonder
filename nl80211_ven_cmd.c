@@ -429,11 +429,11 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 	u8 hw_amsdu = wonder->wondertap_data.cap.bits.amsdu_aggregation;
 	u8 hw_ampdu = wonder->wondertap_data.cap.bits.ampdu_aggregation;
 	u8 ch_hopping = wonder->wondertap_data.cap.bits.channel_hopping;
-	bool is_ibss_mode = (wdev->iftype == NL80211_IFTYPE_ADHOC) ? true : false;
-	u32 mtu_size = is_ibss_mode ? WONDER_IBSS_MODE_MTU_SIZE : INT_MAX;
+	bool is_monitor_mode = (wdev && wdev->iftype == NL80211_IFTYPE_MONITOR) ? true : false;
+	u32 mtu_size = is_monitor_mode ? INT_MAX : WONDER_NORMAL_MODE_MTU_SIZE;
 
-	pr_debug("Handling is_ibss_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u, CH_HOPPING: %u\n",
-		is_ibss_mode, mtu_size, hw_amsdu, hw_ampdu, ch_hopping);
+	pr_debug("Handling monitor_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u, CH_HOPPING: %u\n",
+		is_monitor_mode, mtu_size, hw_amsdu, hw_ampdu, ch_hopping);
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(reply_skb_size));
 	if (!skb) {
@@ -780,7 +780,7 @@ static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 			.vendor_id = WONDER_VENDOR_ID,
 			.subcmd = WONDER_VEN_SUBCMD_GET_CAP
 		},
-		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.flags = 0,
 		.doit = wonder_vendor_cmd_get_cap,
 		.policy = VENDOR_CMD_RAW_DATA,
 	},
