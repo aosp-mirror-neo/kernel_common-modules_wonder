@@ -30,6 +30,7 @@ static int wonder_ver_match_table[WONDER_MAX_COMPAT_VERSIONS] = {
 	WONDER_VERSION_3_6_4,
 	WONDER_VERSION_3_6_3,
 	WONDER_VERSION_3_4,
+	WONDER_VERSION_3_6_5,
 	-1,
 };
 
@@ -65,7 +66,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 
 	wondertap = &wonder->wondertap_data;
 	/* Assign wondertap interface version will be used in the match process. */
-	wondertap->ver = WONDER_VERSION_3_6_4;
+	wondertap->ver = WONDER_VERSION_3_6_5;
 	auxiliary_set_drvdata(&wonder_adev->adev, wonder);
 
 	if (!wonder_ver_can_support(wonder_adev->ver, wondertap->ver)) {

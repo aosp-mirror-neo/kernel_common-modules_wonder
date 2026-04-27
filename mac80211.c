@@ -572,6 +572,12 @@ static void wonder_tx(struct ieee80211_hw *hw,
 			       skb->data, skb->len, false);
 	}
 
+	if (unlikely(skb->len < sizeof(struct ieee80211_hdr))) {
+		vdev->stats.tx_errors++;
+		pr_err("TX packet too short, dropping packet.\n");
+		goto drop;
+	}
+
 	hdr = (struct ieee80211_hdr *)skb->data;
 	/* The mac80211 probe request my using Broadcast BSSID correct it in here. */
 	if (wonder->iftype == NL80211_IFTYPE_ADHOC && ieee80211_is_probe_req(hdr->frame_control)) {
@@ -586,7 +592,14 @@ static void wonder_tx(struct ieee80211_hw *hw,
 	/* Assign wonder txd */
 	txd->frame_type = le16_to_cpu(hdr->frame_control) & IEEE80211_FCTL_FTYPE;
 	txd->is_unicast = !is_multicast_ether_addr(hdr->addr1);
-	txd->tid = (ieee80211_is_data_qos(hdr->frame_control)) ? ieee80211_get_tid(hdr) : 0;
+
+	if (ieee80211_is_data_qos(hdr->frame_control)) {
+		u8 tid = ieee80211_get_tid(hdr);
+		/* Ensure that tainted values are properly sanitized */
+		txd->tid = (tid <= 0xf) ? tid : 0;
+	} else {
+		txd->tid = 0;
+	}
 	skb_pull(skb, sizeof(struct wonder_txd));
 	/* The monitor mode request non-zero length of radiotap. */
 	radhdr = (struct ieee80211_radiotap_header *)skb->data;
