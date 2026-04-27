@@ -404,8 +404,15 @@ struct wondertap_capability {
 			u32 frame_type_filter: 1;
 			/* @brief Channel hopping is supported. */
 			u32 channel_hopping: 1;
+			/* @brief High Band Simultaneous is supported. */
+			u32 hbs_support: 1;
+			/*
+			 * @brief Maximum number of supported spatial streams (NSS).
+			 * Encoded as (NSS - 1), where 0 = 1 stream and 7 = 8 streams.
+			 */
+			u32 nss: 3;
 			/* @brief Reserved for future use. Must be 0. */
-			u32 reserved: 18;
+			u32 reserved: 14;
 		} bits;
 	};
 	/**
@@ -707,6 +714,7 @@ enum wondertap_ver {
 	WONDER_VERSION_3_6_2 = WONDER_VERSION_3_6_1,
 	WONDER_VERSION_3_6_3 = WONDER_VERSION_3_6_1,
 	WONDER_VERSION_3_6_4,
+	WONDER_VERSION_3_6_5,
 	WONDER_VERSION_MAX,
 };
 
