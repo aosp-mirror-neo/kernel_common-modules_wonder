@@ -7,6 +7,7 @@
 #include <net/netlink.h>
 #include <net/mac80211.h>
 
+#include "wondertap.h"
 #include "core.h"
 #include "wonder_ven_cmd.h"
 #include "nl80211_ven_cmd.h"
@@ -437,15 +438,32 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct wonder_data *wonder = hw->priv;
 	struct sk_buff *skb;
-	const size_t reply_skb_size = sizeof(u32) + sizeof(u8) * 3;
-	u8 hw_amsdu = wonder->wondertap_data.cap.bits.amsdu_aggregation;
-	u8 hw_ampdu = wonder->wondertap_data.cap.bits.ampdu_aggregation;
-	u8 ch_hopping = wonder->wondertap_data.cap.bits.channel_hopping;
+	const size_t reply_skb_size = sizeof(u32) + sizeof(u8) * 5;
+	struct wondertap_capability cap;
 	bool is_monitor_mode = (wdev && wdev->iftype == NL80211_IFTYPE_MONITOR) ? true : false;
 	u32 mtu_size = is_monitor_mode ? INT_MAX : WONDER_NORMAL_MODE_MTU_SIZE;
+	u8 hbs_support;
+	u8 nss;
+	u8 hw_amsdu;
+	u8 hw_ampdu;
+	u8 ch_hopping;
+	int ret;
 
-	pr_debug("Handling monitor_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u, CH_HOPPING: %u\n",
-		is_monitor_mode, mtu_size, hw_amsdu, hw_ampdu, ch_hopping);
+	ret = wondertap_get_capabilities(&wonder->wondertap_data, &cap);
+
+	if (ret) {
+		pr_err("Failed to get capabilities\n");
+		return -EINVAL;
+	}
+
+	hbs_support = cap.bits.hbs_support;
+	nss = cap.bits.nss + 1;
+	hw_amsdu = cap.bits.amsdu_aggregation;
+	hw_ampdu = cap.bits.ampdu_aggregation;
+	ch_hopping = cap.bits.channel_hopping;
+
+	pr_debug("Handling monitor_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u, CH_HOPPING: %u, HBS_SUPPORT: %u, NSS: %u\n",
+		is_monitor_mode, mtu_size, hw_amsdu, hw_ampdu, ch_hopping, hbs_support, nss);
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(reply_skb_size));
 	if (!skb) {
@@ -474,6 +492,18 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 
 	if (nla_put(skb, WONDER_VEN_ATTR_CAP_CH_HOPPING, sizeof(u8), &ch_hopping)) {
 		pr_err("Failed to put CAP CH_HOPPING attribute\n");
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	if (nla_put(skb, WONDER_VEN_ATTR_CAP_HBS_SUPPORT, sizeof(u8), &hbs_support)) {
+		pr_err("Failed to put CAP HBS_SUPPORT attribute\n");
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	if (nla_put(skb, WONDER_VEN_ATTR_CAP_NSS, sizeof(u8), &nss)) {
+		pr_err("Failed to put CAP NSS attribute\n");
 		kfree_skb(skb);
 		return -EMSGSIZE;
 	}
