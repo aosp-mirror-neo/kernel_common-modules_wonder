@@ -25,11 +25,12 @@
 module_param(physical_name, charp, 0444);
 MODULE_PARM_DESC(physical_name, "Interface name to use (e.g., wlan0, radiotap0, ...)");
 
-#define WONDER_MAX_COMPAT_VERSIONS 5
+#define WONDER_MAX_COMPAT_VERSIONS 6
 static int wonder_ver_match_table[WONDER_MAX_COMPAT_VERSIONS] = {
+	WONDER_VERSION_3_4,
+	WONDER_VERSION_3_5,
 	WONDER_VERSION_3_6_4,
 	WONDER_VERSION_3_6_3,
-	WONDER_VERSION_3_4,
 	WONDER_VERSION_3_6_5,
 	-1,
 };
