@@ -356,7 +356,6 @@ int wondertap_channel_schedule_request(struct wondertap_data *wondertap,
 			if (!cached_schedule->channel_list) {
 				pr_err("Failed to allocate memory for channel list\n");
 				cached_schedule->channel_list_len = 0;
-				wondertap->cache_flags &= ~WONDERTAP_CACHE_CHANNEL_SCHEDULE_SET;
 				ret = -ENOMEM;
 				goto out_unlock;
 			}
@@ -371,8 +370,6 @@ int wondertap_channel_schedule_request(struct wondertap_data *wondertap,
 
 	if (request->channel_list && request->channel_list_len > 0)
 		memcpy(cached_schedule->channel_list, request->channel_list, list_size);
-
-	wondertap->cache_flags |= WONDERTAP_CACHE_CHANNEL_SCHEDULE_SET;
 
 	if (wondertap_is_up(wondertap)) {
 		if (request->channel_list_len > 0) {

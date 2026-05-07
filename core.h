@@ -38,6 +38,7 @@ struct wonder_data {
 	unsigned int config_filters;
 	bool ampdu_enable;
 	bool amsdu_enable;
+	bool channel_hopping_enable;
 	u32 amsdu_threshold;
 	u32 amsdu_delay;
 	struct wondertap_data wondertap_data;
