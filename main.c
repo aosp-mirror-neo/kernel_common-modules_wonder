@@ -79,6 +79,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 
 	/* All matched, hook the ops to wondertap interface. */
 	wondertap->wonder_ops = wonder_adev->wonder_ops;
+	wondertap->wifi_ver = wonder_adev->ver;
 	dev_dbg(dev, "%s(): Connected to wlan ver %d (cur: wonder ver %d)!\n",
 		__func__, wonder_adev->ver, wondertap->ver);
 
