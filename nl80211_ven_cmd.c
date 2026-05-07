@@ -111,6 +111,12 @@ wonder_set_station_info_policy[WONDER_VEN_ATTR_STA_INFO_MAX + 1] = {
 	[WONDER_VEN_ATTR_STA_INFO_HE_6GHZ_CAP] = { .type = NLA_BINARY },
 };
 
+static const struct nla_policy
+wonder_set_features_policy[WONDER_VEN_ATTR_FEATURE_MAX + 1] = {
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_FEATURE_ID),
+	WONDER_POL_SCALAR(WONDER_VEN_ATTR_FEATURE_ENABLE),
+};
+
 static int wonder_vendor_cmd_set_frequency(struct wiphy *wiphy,
 					   struct wireless_dev *wdev,
 					   const void *data, int data_len)
@@ -843,6 +849,49 @@ static int wonder_vendor_cmd_set_station_info(struct wiphy *wiphy,
 	return wondertap_set_station_info(&wonder->wondertap_data, action, &sta_info);
 }
 
+static int wonder_vendor_cmd_set_features(struct wiphy *wiphy,
+					  struct wireless_dev *wdev,
+					  const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct wonder_data *wonder = hw->priv;
+	struct nlattr *tb[WONDER_VEN_ATTR_FEATURE_MAX + 1];
+	u32 feature_id;
+	u8 enable;
+
+	if (nla_parse(tb, WONDER_VEN_ATTR_FEATURE_MAX, data, data_len,
+		      wonder_set_features_policy, NULL) < 0) {
+		pr_err("Failed to parse features attributes\n");
+		return -EINVAL;
+	}
+
+	if (!tb[WONDER_VEN_ATTR_FEATURE_ID] || !tb[WONDER_VEN_ATTR_FEATURE_ENABLE]) {
+		pr_err("Missing mandatory attributes for set features\n");
+		return -EINVAL;
+	}
+
+	feature_id = nla_get_u32(tb[WONDER_VEN_ATTR_FEATURE_ID]);
+	enable = nla_get_u8(tb[WONDER_VEN_ATTR_FEATURE_ENABLE]);
+
+	pr_debug("SET_FEATURES: feature_id=%u, enable=%u\n", feature_id, enable);
+
+	switch (feature_id) {
+	case WONDER_FEATURE_CHANNEL_HOPPING:
+		wonder->channel_hopping_enable = enable;
+		wonder->wondertap_data.cache_flags |= WONDERTAP_CACHE_CHANNEL_HOPPING_SET;
+		break;
+	case WONDER_FEATURE_AMSDU:
+		wonder->amsdu_enable = enable;
+		wonder->wondertap_data.cache_flags |= WONDERTAP_CACHE_AMSDU_SET;
+		break;
+	default:
+		pr_err("Unknown feature ID: %u\n", feature_id);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 	{
 		.info = {
@@ -941,6 +990,15 @@ static const struct wiphy_vendor_command wonder_vendor_cmds[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wonder_vendor_cmd_set_station_info,
+		.policy = VENDOR_CMD_RAW_DATA,
+	},
+	{
+		.info = {
+			.vendor_id = WONDER_VENDOR_ID,
+			.subcmd = WONDER_VEN_SUBCMD_SET_FEATURES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wonder_vendor_cmd_set_features,
 		.policy = VENDOR_CMD_RAW_DATA,
 	},
 };
