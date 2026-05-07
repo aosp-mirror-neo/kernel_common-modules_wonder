@@ -648,11 +648,18 @@ static int wonder_start(struct ieee80211_hw *hw)
 	pr_debug("wondertap version: %u\n", wonder->wondertap_data.cap.version);
 	pr_debug("wondertap capabilities: 0x%X\n", wonder->wondertap_data.cap.raw_bits);
 	init_params->ampdu_enable = wonder->wondertap_data.cap.bits.ampdu_aggregation;
-	init_params->amsdu_enable = wonder->wondertap_data.cap.bits.amsdu_aggregation;
 	init_params->rate_adaptation_enable =
 		wonder->wondertap_data.cap.bits.rate_adaptation;
+
+	/* Fall back to hardware capabilities if not explicitly set by upper layer */
+	init_params->amsdu_enable =
+		(wonder->wondertap_data.cache_flags & WONDERTAP_CACHE_AMSDU_SET) ?
+		wonder->amsdu_enable : wonder->wondertap_data.cap.bits.amsdu_aggregation;
+
 	init_params->channel_hopping_enable =
-		wonder->wondertap_data.cap.bits.channel_hopping;
+		(wonder->wondertap_data.cache_flags & WONDERTAP_CACHE_CHANNEL_HOPPING_SET) ?
+		wonder->channel_hopping_enable : wonder->wondertap_data.cap.bits.channel_hopping;
+
 	ret = wondertap_init(&wonder->wondertap_data, init_params);
 	if (ret) {
 		pr_err("Failed to initialize wondertap0, error: %d\n", ret);
@@ -1138,6 +1145,7 @@ void *wonder_mac80211_init(void)
 
 	wonder->ampdu_enable = false;
 	wonder->amsdu_enable = false;
+	wonder->channel_hopping_enable = false;
 	wonder->amsdu_threshold = 8000;
 	wonder->amsdu_delay = 3000;
 	/* Set Band Capabilities */
