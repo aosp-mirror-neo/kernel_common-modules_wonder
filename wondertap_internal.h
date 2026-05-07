@@ -45,6 +45,7 @@ struct wondertap_data {
 	u8 cached_bssid[ETH_ALEN];
 	char cached_country_code[3];
 	enum wondertap_ver ver;
+	enum wondertap_ver wifi_ver;
 	struct device_node *wlan_node;
 	/* MAC address for station query via debugfs */
 	u8 query_mac_addr[ETH_ALEN];

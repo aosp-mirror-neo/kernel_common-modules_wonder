@@ -17,15 +17,6 @@
 #include "mac80211.h"
 #include "wondertap_internal.h"
 
-static int wonder_version_show(struct seq_file *m, void *v)
-{
-	struct wonder_data *wonder = m->private;
-
-	seq_printf(m, "%u\n", wonder->wondertap_data.ver);
-	return 0;
-
-}
-DEFINE_SHOW_ATTRIBUTE(wonder_version);
 
 static int wonder_capabilities_show(struct seq_file *m, void *v)
 {
@@ -243,6 +234,39 @@ static const struct file_operations wonder_station_query_fops = {
 	.release = single_release,
 };
 
+static const char *wonder_ver_to_str(enum wondertap_ver ver)
+{
+	switch (ver) {
+	case WONDER_VERSION_3_0: return "WONDER_VERSION_3_0";
+	case WONDER_VERSION_3_1: return "WONDER_VERSION_3_1";
+	case WONDER_VERSION_3_2: return "WONDER_VERSION_3_2";
+	case WONDER_VERSION_3_3: return "WONDER_VERSION_3_3";
+	case WONDER_VERSION_3_4: return "WONDER_VERSION_3_4";
+	case WONDER_VERSION_3_4_1: return "WONDER_VERSION_3_4_1";
+	case WONDER_VERSION_3_5: return "WONDER_VERSION_3_5";
+	case WONDER_VERSION_3_5_1: return "WONDER_VERSION_3_5_1";
+	case WONDER_VERSION_3_6_1: return "WONDER_VERSION_3_6_1 (or 3_6_2/3_6_3)";
+	case WONDER_VERSION_3_6_4: return "WONDER_VERSION_3_6_4";
+	case WONDER_VERSION_3_6_5: return "WONDER_VERSION_3_6_5";
+	default: return "UNKNOWN_VERSION";
+	}
+}
+
+static int wonder_version_show(struct seq_file *m, void *v)
+{
+	struct wonder_data *wonder = m->private;
+	struct wondertap_data *wondertap = &wonder->wondertap_data;
+
+	mutex_lock(&wondertap->lock);
+	seq_printf(m, "Wonder version: %s\n", wonder_ver_to_str(wondertap->ver));
+	seq_printf(m, "WiFi version: %s\n", wonder_ver_to_str(wondertap->wifi_ver));
+	mutex_unlock(&wondertap->lock);
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(wonder_version);
+
 void wonder_debugfs_init(void *wonder)
 {
 	struct dentry *wonder_debugfs_root;
@@ -250,7 +274,6 @@ void wonder_debugfs_init(void *wonder)
 
 	wonder_debugfs_root = debugfs_create_dir("wonder", NULL);
 
-	debugfs_create_file("version", 0400, wonder_debugfs_root, wonder, &wonder_version_fops);
 	debugfs_create_file("capabilities", 0400, wonder_debugfs_root, wonder,
 			    &wonder_capabilities_fops);
 	debugfs_create_file("channel_status_report", 0644, wonder_debugfs_root,
@@ -259,6 +282,8 @@ void wonder_debugfs_init(void *wonder)
 			    wonder, &wonder_channel_schedule_request_fops);
 	debugfs_create_file("station_query", 0644, wonder_debugfs_root,
 			    wonder, &wonder_station_query_fops);
+	debugfs_create_file("version", 0444, wonder_debugfs_root,
+			    wonder, &wonder_version_fops);
 	debugfs_create_bool("amsdu_enable", 0644, wonder_debugfs_root,
 			    &((struct wonder_data *)wonder)->amsdu_enable);
 	debugfs_create_bool("ampdu_enable", 0644, wonder_debugfs_root,
