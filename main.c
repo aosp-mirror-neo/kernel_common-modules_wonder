@@ -61,7 +61,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 	struct device *dev = &wonder_adev->adev.dev;
 	int ret;
 
-	wonder = wonder_mac80211_init();
+	wonder = wonder_mac80211_init(dev);
 	if (!wonder)
 		return -ENODEV;
 

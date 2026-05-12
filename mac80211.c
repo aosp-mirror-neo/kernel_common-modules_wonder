@@ -1163,7 +1163,7 @@ void wonder_features_exit(struct wonder_data *wonder)
 	pr_debug("Wonder Virtual Soft-MAC Driver unloaded successfully.\n");
 }
 
-void *wonder_mac80211_init(void)
+void *wonder_mac80211_init(struct device *dev)
 {
 	struct ieee80211_hw *hw;
 	struct wonder_data *wonder = NULL;
@@ -1229,6 +1229,7 @@ void *wonder_mac80211_init(void)
 
 	eth_random_addr(random_mac_addr);
 	SET_IEEE80211_PERM_ADDR(hw, random_mac_addr);
+	SET_IEEE80211_DEV(hw, dev);
 	pr_debug("Set MAC addrs from wlan0: %pM\n", random_mac_addr);
 
 	hw->extra_tx_headroom = 0; /* The frame is fully formed by mac80211 */
