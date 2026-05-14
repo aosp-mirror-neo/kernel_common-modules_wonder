@@ -83,16 +83,6 @@ wonder_set_reg_policy[WONDER_VEN_ATTR_REG_MAX + 1] = {
 };
 
 static const struct nla_policy
-wonder_channel_schedule_policy[WONDER_VEN_ATTR_CHANNEL_SCHEDULE_MAX + 1] = {
-	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST_LEN),
-	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_NEXT_IDX),
-	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_DWELL_TIME),
-	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_SWITCH_TIME),
-	WONDER_POL_NESTED(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_LIST),
-	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_SCHEDULE_TSF_OFFSET),
-};
-
-static const struct nla_policy
 wonder_channel_list_entry_policy[WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_MAX + 1] = {
 	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_FREQ),
 	WONDER_POL_SCALAR(WONDER_VEN_ATTR_CHANNEL_LIST_ENTRY_BW),
@@ -468,8 +458,10 @@ static int wonder_vendor_cmd_get_cap(struct wiphy *wiphy,
 	hw_ampdu = cap.bits.ampdu_aggregation;
 	ch_hopping = cap.bits.channel_hopping;
 
-	pr_debug("Handling monitor_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u, CH_HOPPING: %u, HBS_SUPPORT: %u, NSS: %u\n",
-		is_monitor_mode, mtu_size, hw_amsdu, hw_ampdu, ch_hopping, hbs_support, nss);
+	pr_debug("Handling monitor_mode: %d, MTU: %u, HW_AMSDU: %u, HW_AMPDU: %u, "
+		"CH_HOPPING: %u, HBS_SUPPORT: %u, NSS: %u\n",
+		is_monitor_mode, mtu_size, hw_amsdu, hw_ampdu, ch_hopping,
+		hbs_support, nss);
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, nla_total_size(reply_skb_size));
 	if (!skb) {
@@ -846,7 +838,8 @@ static int wonder_vendor_cmd_set_station_info(struct wiphy *wiphy,
 	pr_debug("SET_STATION_INFO: action=%u, mac=%pM, aid=%u, cap_mask=0x%x\n",
 		    action, sta_info.mac, sta_info.aid, sta_info.capability_mask);
 
-	return wondertap_set_station_info(&wonder->wondertap_data, action, &sta_info);
+	wondertap_set_station_info(&wonder->wondertap_data, action, &sta_info);
+	return 0;
 }
 
 static int wonder_vendor_cmd_set_features(struct wiphy *wiphy,
