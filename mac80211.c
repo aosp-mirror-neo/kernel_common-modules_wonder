@@ -95,7 +95,7 @@ static rx_handler_result_t wonder_rx_80211_frame(struct wonder_data *wonder, str
 
 	/* Filtering */
 	radhdr = (struct ieee80211_radiotap_header *)skb->data;
-	hdr = (struct ieee80211_hdr *)(skb->data + radhdr->it_len);
+	hdr = (struct ieee80211_hdr *)(skb->data + le16_to_cpu(radhdr->it_len));
 
 	if (IS_ENABLED(CONFIG_ANDROID_WONDER_RX_DEBUG)) {
 		pr_err("%s(): receiv packet from %s, send to mac80211, skb->protocol: %x, radhdr_len: %d\n",
@@ -605,7 +605,7 @@ static void wonder_tx(struct ieee80211_hw *hw,
 	radhdr = (struct ieee80211_radiotap_header *)skb->data;
 	radhdr->it_version = 0;
 	radhdr->it_pad = 0;
-	radhdr->it_len = sizeof(struct ieee80211_radiotap_header) + 1;
+	radhdr->it_len = cpu_to_le16(sizeof(struct ieee80211_radiotap_header) + 1);
 	/* Assign the skb to the physical device for transmission */
 	skb->dev = pdev;
 	/* Report Fake TX status to adjust Rate and AMSDU length */
