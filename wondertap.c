@@ -71,78 +71,80 @@ int wondertap_init(struct wondertap_data *wondertap, const struct wondertap_init
 		goto out;
 	}
 
-	if (wondertap->wonder_ops && wondertap->wonder_ops->init) {
-		eth_random_addr(wondertap->mac_addr);
-		params.channel = wondertap->cached_freq;
-		params.tx_rate = wondertap->cached_tx_rate;
-		memcpy(params.bssid, wondertap->cached_bssid, ETH_ALEN);
-		memcpy(params.mac_addr, wondertap->mac_addr, ETH_ALEN);
-		memcpy(params.country_code, wondertap->cached_country_code,
-		       sizeof(wondertap->cached_country_code));
+	eth_random_addr(wondertap->mac_addr);
+	params.channel = wondertap->cached_freq;
+	params.tx_rate = wondertap->cached_tx_rate;
+	memcpy(params.bssid, wondertap->cached_bssid, ETH_ALEN);
+	memcpy(params.mac_addr, wondertap->mac_addr, ETH_ALEN);
+	memcpy(params.country_code, wondertap->cached_country_code,
+	       sizeof(wondertap->cached_country_code));
 
-		if (_params->rate_adaptation_enable) {
-			params.rate_adaptation_enable = _params->rate_adaptation_enable;
-			params.tx_rate_mask.max_preamble = wondertap->cached_tx_rate.preamble;
-			params.tx_rate_mask.max_bw = WONDERTAP_RA_MAX_BW;
-			params.tx_rate_mask.max_nss = WONDERTAP_RA_MAX_NSS;
-			params.tx_rate_mask.max_mcs = WONDERTAP_RA_MAX_MCS;
-		}
+	if (_params->rate_adaptation_enable) {
+		params.rate_adaptation_enable = _params->rate_adaptation_enable;
+		params.tx_rate_mask.max_preamble = wondertap->cached_tx_rate.preamble;
+		params.tx_rate_mask.max_bw = WONDERTAP_RA_MAX_BW;
+		params.tx_rate_mask.max_nss = WONDERTAP_RA_MAX_NSS;
+		params.tx_rate_mask.max_mcs = WONDERTAP_RA_MAX_MCS;
+	}
 
-		if (_params->channel_hopping_enable)
-			params.channel_hopping_enable = _params->channel_hopping_enable;
+	if (_params->channel_hopping_enable)
+		params.channel_hopping_enable = _params->channel_hopping_enable;
 
-		wondertap_dump_init_params(&params);
+	wondertap_dump_init_params(&params);
+	for (retry = 0; retry <= WONDER_INIT_RETRY_CNT; retry++) {
 
-		for (retry = 0; retry <= WONDER_INIT_RETRY_CNT; retry++) {
-			ret = wondertap->wonder_ops->init(&wondertap->vendor_handle, &params);
-			if (ret == 0)
-				break;
-
-			if (retry < WONDER_INIT_RETRY_CNT) {
-				pr_warn(
-					"Vendor init failed: %d. Retrying in %d ms...(retry %d)\n",
-					ret, WONDER_INIT_RETRY_WAIT, retry + 1);
-				msleep(WONDER_INIT_RETRY_WAIT);
-			}
-		}
-
-		if (ret == 0) {
-			wondertap->state = WONDERTAP_STATE_UP;
-
-			if (_params->channel_hopping_enable &&
-			    wondertap->wonder_ops->channel_schedule_request &&
-			    wondertap->cached_channel_schedule.channel_list_len > 0) {
-				struct wondertap_capability caps;
-				u32 delta = 0;
-				u32 mac_tsf;
-
-				ret = wondertap_get_capabilities(wondertap, &caps);
-				if (ret) {
-					pr_err(
-						"Failed to get capabilities for channel schedule\n");
-					goto out;
-				}
-
-				ret = wondertap_get_mac_tsf(wondertap, &mac_tsf);
-				if (ret) {
-					pr_err("Failed to get TSF for channel schedule\n");
-					goto out;
-				}
-
-				wondertap->cached_channel_schedule.target_switch_time_tsf =
-					mac_tsf + caps.maximum_channel_switch_time_us + delta;
-				wondertap->wonder_ops->channel_schedule_request(
-					wondertap->vendor_handle,
-					&wondertap->cached_channel_schedule);
-				pr_debug("Applied cached channel schedule\n");
-			}
-		} else {
-			pr_err("Vendor init failed: %d\n", ret);
+		if (!wondertap->wonder_ops || !wondertap->wonder_ops->init) {
+			pr_err("Vendor operation 'init' is not implemented\n");
+			ret = -EOPNOTSUPP;
 			goto out;
 		}
+
+		ret = wondertap->wonder_ops->init(&wondertap->vendor_handle, &params);
+		if (ret == 0)
+			break;
+
+		if (retry < WONDER_INIT_RETRY_CNT) {
+			pr_warn(
+				"Vendor init failed: %d. Retrying in %d ms...(retry %d)\n",
+				ret, WONDER_INIT_RETRY_WAIT, retry + 1);
+			msleep(WONDER_INIT_RETRY_WAIT);
+		}
+	}
+
+	if (ret == 0) {
+		wondertap->state = WONDERTAP_STATE_UP;
+		pr_debug("Vendor init successful. State set to UP.\n");
+
+		if (_params->channel_hopping_enable &&
+			wondertap->wonder_ops->channel_schedule_request &&
+			wondertap->cached_channel_schedule.channel_list_len > 0) {
+			struct wondertap_capability caps;
+			u32 delta = 0;
+			u32 mac_tsf;
+
+			ret = wondertap_get_capabilities(wondertap, &caps);
+			if (ret) {
+				pr_err(
+					"Failed to get capabilities for channel schedule\n");
+				goto out;
+			}
+
+			ret = wondertap_get_mac_tsf(wondertap, &mac_tsf);
+			if (ret) {
+				pr_err("Failed to get TSF for channel schedule\n");
+				goto out;
+			}
+
+			wondertap->cached_channel_schedule.target_switch_time_tsf =
+				mac_tsf + caps.maximum_channel_switch_time_us + delta;
+			wondertap->wonder_ops->channel_schedule_request(
+				wondertap->vendor_handle,
+				&wondertap->cached_channel_schedule);
+			pr_debug("Applied cached channel schedule\n");
+		}
 	} else {
-		pr_err("Vendor operation 'init' is not implemented\n");
-		ret = -EOPNOTSUPP;
+		pr_err("Vendor init failed: %d\n", ret);
+		goto out;
 	}
 
 out:
