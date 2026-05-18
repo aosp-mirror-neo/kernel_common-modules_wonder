@@ -793,11 +793,11 @@ static void wonder_wake_tx_queue(struct ieee80211_hw *hw,
 	/* Aggregation Logic: Wait for more packets if size is small */
 	if (wonder->amsdu_enable) {
 		if (byte_count > wonder->amsdu_threshold) {
-			schedule_delayed_work(&wonder->tx_work, 0);
+			queue_delayed_work(wonder->workqueue, &wonder->tx_work, 0);
 		} else {
 			/* Schedule flush to prevent packets stuck */
-			schedule_delayed_work(&wonder->tx_work,
-				usecs_to_jiffies(wonder->amsdu_delay));
+			queue_delayed_work(wonder->workqueue, &wonder->tx_work,
+					 usecs_to_jiffies(wonder->amsdu_delay));
 		}
 	} else {
 		wonder_handle_tx_queue(hw, txq->ac);
@@ -978,38 +978,57 @@ static int wonder_ampdu_action(struct ieee80211_hw *hw,
 	return 0;
 }
 
+static void wonder_sta_update_worker(struct work_struct *work)
+{
+	struct wonder_sta_update_work *swork =
+		container_of(work, struct wonder_sta_update_work, work);
+
+	wondertap_set_station_info(&swork->wonder->wondertap_data,
+				   swork->action, &swork->sta_info);
+	kfree(swork);
+}
+
 static int wonder_update_station_state(struct ieee80211_hw *hw,
 			struct ieee80211_sta *sta,
 			enum wondertap_station_action action)
 {
-	struct wondertap_station_info sta_info;
+	struct wonder_sta_update_work *swork;
 	struct ieee80211_link_sta *link_sta = &sta->deflink;
 	struct wonder_data *wonder = hw->priv;
+	struct wondertap_station_info *sta_info;
 
-	memset(&sta_info, 0, sizeof(sta_info));
-	sta_info.aid = sta->aid;
-	memcpy(sta_info.mac, sta->addr, ETH_ALEN);
+	swork = kzalloc(sizeof(*swork), GFP_ATOMIC);
+	if (!swork)
+		return -ENOMEM;
+
+	INIT_WORK(&swork->work, wonder_sta_update_worker);
+	swork->wonder = wonder;
+	swork->action = action;
+	sta_info = &swork->sta_info;
+	sta_info->aid = sta->aid;
+	memcpy(sta_info->mac, sta->addr, ETH_ALEN);
 
 	if (link_sta->ht_cap.ht_supported) {
-		sta_info.ht_capa.cap_info = link_sta->ht_cap.cap;
-		sta_info.ht_capa.ampdu_params_info = 0x1f;
-		sta_info.ht_capa.mcs = link_sta->ht_cap.mcs;
-		sta_info.capability_mask |= BIT(WONDERTAP_STATION_CAP_HT);
+		sta_info->ht_capa.cap_info = link_sta->ht_cap.cap;
+		sta_info->ht_capa.ampdu_params_info = 0x1f;
+		sta_info->ht_capa.mcs = link_sta->ht_cap.mcs;
+		sta_info->capability_mask |= BIT(WONDERTAP_STATION_CAP_HT);
 	}
 
 	if (link_sta->vht_cap.vht_supported) {
-		sta_info.vht_capa.vht_cap_info = link_sta->vht_cap.cap;
-		sta_info.vht_capa.supp_mcs = link_sta->vht_cap.vht_mcs;
-		sta_info.capability_mask |= BIT(WONDERTAP_STATION_CAP_VHT);
+		sta_info->vht_capa.vht_cap_info = link_sta->vht_cap.cap;
+		sta_info->vht_capa.supp_mcs = link_sta->vht_cap.vht_mcs;
+		sta_info->capability_mask |= BIT(WONDERTAP_STATION_CAP_VHT);
 	}
 
 	if (link_sta->he_cap.has_he) {
-		sta_info.he_capa = link_sta->he_cap.he_cap_elem;
-		sta_info.he_capa_len = sizeof(link_sta->he_cap.he_cap_elem);
-		sta_info.capability_mask |= BIT(WONDERTAP_STATION_CAP_HE);
+		sta_info->he_capa = link_sta->he_cap.he_cap_elem;
+		sta_info->he_capa_len = sizeof(link_sta->he_cap.he_cap_elem);
+		sta_info->capability_mask |= BIT(WONDERTAP_STATION_CAP_HE);
 	}
 
-	return wondertap_set_station_info(&wonder->wondertap_data, action, &sta_info);
+	queue_work(wonder->workqueue, &swork->work);
+	return 0;
 }
 
 static int wonder_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
@@ -1148,6 +1167,14 @@ void *wonder_mac80211_init(void)
 	wonder->channel_hopping_enable = false;
 	wonder->amsdu_threshold = 8000;
 	wonder->amsdu_delay = 3000;
+
+	wonder->workqueue = create_singlethread_workqueue(DRV_NAME);
+	if (!wonder->workqueue) {
+		pr_err("Failed to create workqueue\n");
+		ieee80211_free_hw(hw);
+		return NULL;
+	}
+
 	/* Set Band Capabilities */
 	hw->wiphy->bands[NL80211_BAND_2GHZ] = &wonder_band_2ghz;
 	hw->wiphy->bands[NL80211_BAND_5GHZ] = &wonder_band_5ghz;
@@ -1197,6 +1224,7 @@ void *wonder_mac80211_init(void)
 	ret = wonder_features_init(wonder);
 	if (ret) {
 		pr_err("Failed to register mac80211 hardware. Ret: %d\n", ret);
+		destroy_workqueue(wonder->workqueue);
 		ieee80211_free_hw(hw);
 		return NULL;
 	}
@@ -1212,5 +1240,6 @@ void wonder_mac80211_exit(struct wonder_data *wonder)
 
 	wonder_ssr_exit(wonder);
 	wonder_features_exit(wonder);
+	destroy_workqueue(wonder->workqueue);
 	ieee80211_free_hw(wonder->hw);
 }
