@@ -426,7 +426,7 @@ int wondertap_get_channel_status_report(struct wondertap_data *wondertap,
 	}
 
 	if (!wondertap->wonder_ops || !wondertap->wonder_ops->get_channel_status_report) {
-		pr_warn("wondertap is inactive.\n");
+		pr_warn("wondertap ops is not supported.\n");
 		ret = -EOPNOTSUPP;
 		goto out_unlock;
 	}
@@ -470,7 +470,7 @@ int wondertap_set_station_info(struct wondertap_data *wondertap,
 	}
 
 	if (!wondertap->wonder_ops || !wondertap->wonder_ops->set_station_info) {
-		pr_warn("wondertap is inactive.\n");
+		pr_warn("wondertap ops is not supported.\n");
 		ret = -EOPNOTSUPP;
 		goto out_unlock;
 	}

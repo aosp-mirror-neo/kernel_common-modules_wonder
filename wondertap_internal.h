@@ -31,6 +31,13 @@ enum wondertap_state {
 #define WONDERTAP_CACHE_CHANNEL_HOPPING_SET (1 << 4)
 #define WONDERTAP_CACHE_AMSDU_SET        (1 << 5)
 
+struct wonder_sta_update_work {
+	struct work_struct work;
+	struct wonder_data *wonder;
+	struct wondertap_station_info sta_info;
+	enum wondertap_station_action action;
+};
+
 struct wondertap_data {
 	void *vendor_handle;
 	enum wondertap_state state;
