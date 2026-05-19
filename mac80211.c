@@ -431,7 +431,7 @@ static rx_handler_result_t wonder_rx_adhoc_handler(struct wonder_data *wonder,
 		skb->pkt_type = PACKET_HOST;
 
 	/* Vendor specific RX handler */
-	if (IS_ENABLED(CONFIG_ANDROID_WONDER_SYNA_SUPPORT))
+	if (wonder->syna_support_enable)
 		syna_rx_handler(wonder, skb);
 
 	/* Fill RX status for mac80211 operation */
@@ -1163,14 +1163,13 @@ void *wonder_mac80211_init(void)
 	wonder->channel_hopping_enable = false;
 	wonder->amsdu_threshold = 8000;
 	wonder->amsdu_delay = 3000;
-
 	wonder->workqueue = create_singlethread_workqueue(DRV_NAME);
 	if (!wonder->workqueue) {
 		pr_err("Failed to create workqueue\n");
 		ieee80211_free_hw(hw);
 		return NULL;
 	}
-
+	wonder->syna_support_enable = false;
 	/* Set Band Capabilities */
 	hw->wiphy->bands[NL80211_BAND_2GHZ] = &wonder_band_2ghz;
 	hw->wiphy->bands[NL80211_BAND_5GHZ] = &wonder_band_5ghz;
