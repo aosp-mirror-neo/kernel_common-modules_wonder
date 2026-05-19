@@ -41,6 +41,7 @@ struct wonder_data {
 	bool channel_hopping_enable;
 	u32 amsdu_threshold;
 	u32 amsdu_delay;
+	bool syna_support_enable;
 	struct wondertap_data wondertap_data;
 	struct workqueue_struct *workqueue;
 	struct work_struct pdev_down_work;
