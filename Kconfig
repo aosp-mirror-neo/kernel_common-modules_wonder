@@ -17,13 +17,6 @@ config ANDROID_WONDER
 
 	  To build this as a module, choose m.
 
-config ANDROID_WONDER_SYNA_SUPPORT
-	bool "Wonder Synaptics Support"
-	help
-	  This enables Synaptics-specific support for the Wonder virtual
-	  device driver, including specialized RX handling and frame
-	  adjustments for Synaptics hardware.
-
 config ANDROID_WONDER_TX_DEBUG
 	bool "Wonder TX Debug Message Support"
 	help
