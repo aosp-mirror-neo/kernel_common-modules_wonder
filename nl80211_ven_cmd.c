@@ -785,6 +785,27 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+static int wonder_map_sta_op_to_action(enum wonder_vendor_station_op op,
+				       enum wondertap_station_action *action)
+{
+	switch (op) {
+	case WONDER_VEN_ATTR_STA_OP_ADD:
+		*action = WONDERTAP_STATION_STATE_NEW;
+		return 0;
+	case WONDER_VEN_ATTR_STA_OP_UPDATE:
+		*action = WONDERTAP_STATION_STATE_UPDATE;
+		return 0;
+	case WONDER_VEN_ATTR_STA_OP_DEL:
+		*action = WONDERTAP_STATION_STATE_DEL;
+		return 0;
+	case WONDER_VEN_ATTR_STA_OP_QUERY:
+		*action = WONDERTAP_STATION_STATE_QUERY;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static int wonder_vendor_cmd_set_station_info(struct wiphy *wiphy,
 					      struct wireless_dev *wdev,
 					      const void *data, int data_len)
@@ -793,6 +814,7 @@ static int wonder_vendor_cmd_set_station_info(struct wiphy *wiphy,
 	struct wonder_data *wonder = hw->priv;
 	struct nlattr *tb[WONDER_VEN_ATTR_STA_INFO_MAX + 1];
 	struct wondertap_station_info sta_info = {0};
+	enum wonder_vendor_station_op op;
 	enum wondertap_station_action action;
 
 	if (nla_parse(tb, WONDER_VEN_ATTR_STA_INFO_MAX, data, data_len,
@@ -808,13 +830,18 @@ static int wonder_vendor_cmd_set_station_info(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	action = nla_get_u32(tb[WONDER_VEN_ATTR_STA_INFO_ACTION]);
-
 	if (nla_len(tb[WONDER_VEN_ATTR_STA_INFO_MAC]) != ETH_ALEN) {
 		pr_err("Invalid MAC address length: %d\n",
 		       nla_len(tb[WONDER_VEN_ATTR_STA_INFO_MAC]));
 		return -EINVAL;
 	}
+
+	op = nla_get_u32(tb[WONDER_VEN_ATTR_STA_INFO_ACTION]);
+	if (wonder_map_sta_op_to_action(op, &action)) {
+		pr_err("Invalid station action op: %u\n", op);
+		return -EINVAL;
+	}
+
 	nla_memcpy(sta_info.mac, tb[WONDER_VEN_ATTR_STA_INFO_MAC], ETH_ALEN);
 
 	if (tb[WONDER_VEN_ATTR_STA_INFO_AID])
