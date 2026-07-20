@@ -1032,14 +1032,15 @@ static int wonder_update_station_state(struct ieee80211_hw *hw,
 	memcpy(sta_info->mac, sta->addr, ETH_ALEN);
 
 	if (link_sta->ht_cap.ht_supported) {
-		sta_info->ht_capa.cap_info = link_sta->ht_cap.cap;
+		sta_info->ht_capa.cap_info = cpu_to_le16(link_sta->ht_cap.cap);
 		sta_info->ht_capa.ampdu_params_info = 0x1f;
 		sta_info->ht_capa.mcs = link_sta->ht_cap.mcs;
 		sta_info->capability_mask |= BIT(WONDERTAP_STATION_CAP_HT);
 	}
 
 	if (link_sta->vht_cap.vht_supported) {
-		sta_info->vht_capa.vht_cap_info = link_sta->vht_cap.cap;
+		sta_info->vht_capa.vht_cap_info =
+			cpu_to_le32(link_sta->vht_cap.cap);
 		sta_info->vht_capa.supp_mcs = link_sta->vht_cap.vht_mcs;
 		sta_info->capability_mask |= BIT(WONDERTAP_STATION_CAP_VHT);
 	}
