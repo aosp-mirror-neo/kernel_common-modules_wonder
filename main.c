@@ -61,7 +61,7 @@ static int wonder_probe(struct auxiliary_device *adev,
 	struct device *dev = &wonder_adev->adev.dev;
 	int ret;
 
-	wonder = wonder_mac80211_init();
+	wonder = wonder_mac80211_init(dev);
 	if (!wonder)
 		return -ENODEV;
 
@@ -103,6 +103,7 @@ static void wonder_remove(struct auxiliary_device *adev)
 
 static const struct auxiliary_device_id wonder_aux_id_table[] = {
 	{ .name = "bcmdhd4390.wondertap" },
+	{ .name = "iwlmld.wondertap" },
 	{},
 };
 MODULE_DEVICE_TABLE(auxiliary, wonder_aux_id_table);

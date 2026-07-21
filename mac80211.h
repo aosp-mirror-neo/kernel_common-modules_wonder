@@ -17,7 +17,7 @@ extern char *physical_name;
 extern struct ieee80211_supported_band wonder_band_2ghz;
 extern struct ieee80211_supported_band wonder_band_5ghz;
 
-void *wonder_mac80211_init(void);
+void *wonder_mac80211_init(struct device *dev);
 void wonder_mac80211_exit(struct wonder_data *wonder);
 #ifdef CONFIG_DEBUG_FS
 void wonder_debugfs_init(void *data);

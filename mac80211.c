@@ -1032,14 +1032,15 @@ static int wonder_update_station_state(struct ieee80211_hw *hw,
 	memcpy(sta_info->mac, sta->addr, ETH_ALEN);
 
 	if (link_sta->ht_cap.ht_supported) {
-		sta_info->ht_capa.cap_info = link_sta->ht_cap.cap;
+		sta_info->ht_capa.cap_info = cpu_to_le16(link_sta->ht_cap.cap);
 		sta_info->ht_capa.ampdu_params_info = 0x1f;
 		sta_info->ht_capa.mcs = link_sta->ht_cap.mcs;
 		sta_info->capability_mask |= BIT(WONDERTAP_STATION_CAP_HT);
 	}
 
 	if (link_sta->vht_cap.vht_supported) {
-		sta_info->vht_capa.vht_cap_info = link_sta->vht_cap.cap;
+		sta_info->vht_capa.vht_cap_info =
+			cpu_to_le32(link_sta->vht_cap.cap);
 		sta_info->vht_capa.supp_mcs = link_sta->vht_cap.vht_mcs;
 		sta_info->capability_mask |= BIT(WONDERTAP_STATION_CAP_VHT);
 	}
@@ -1163,7 +1164,7 @@ void wonder_features_exit(struct wonder_data *wonder)
 	pr_debug("Wonder Virtual Soft-MAC Driver unloaded successfully.\n");
 }
 
-void *wonder_mac80211_init(void)
+void *wonder_mac80211_init(struct device *dev)
 {
 	struct ieee80211_hw *hw;
 	struct wonder_data *wonder = NULL;
@@ -1229,6 +1230,7 @@ void *wonder_mac80211_init(void)
 
 	eth_random_addr(random_mac_addr);
 	SET_IEEE80211_PERM_ADDR(hw, random_mac_addr);
+	SET_IEEE80211_DEV(hw, dev);
 	pr_debug("Set MAC addrs from wlan0: %pM\n", random_mac_addr);
 
 	hw->extra_tx_headroom = 0; /* The frame is fully formed by mac80211 */
