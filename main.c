@@ -7,7 +7,6 @@
  * network device and kicking off the mac80211 registration process.
  */
 
-#include "include/wondertap.h"
 #include <linux/auxiliary_bus.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
