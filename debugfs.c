@@ -12,6 +12,7 @@
 #include <linux/uaccess.h>
 #include <linux/etherdevice.h>
 #include <linux/seq_file.h>
+#include <linux/hex.h>
 
 #include "core.h"
 #include "mac80211.h"
